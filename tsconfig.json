@@ -1,19 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "strict": true,
-    "noImplicitAny": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "types": ["node", "jest"]
-  },
+  "extends": "./tsconfig.base.json",
   "include": ["apps/**/*.ts", "apps/**/*.tsx", "shared/**/*.ts"],
   "exclude": ["node_modules", "dist", "coverage"]
 }
