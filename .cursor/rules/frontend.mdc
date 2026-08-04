@@ -1,0 +1,16 @@
+---
+description: React UI standards, TanStack Query cache boundaries, and HITL interface rules
+globs: "apps/frontend/**/*"
+alwaysApply: false
+---
+# Frontend UI Standards
+
+## Data Fetching & State Boundaries
+- Components MUST NOT call `fetch` or `axios` directly. Wrap all HTTP endpoints in custom React Query hooks (`useQuery`, `useMutation`).
+- Server State: Owned exclusively by React Query Cache (`invalidateQueries` on successful mutations).
+- Local UI State: Managed via React `useState` / `useReducer`.
+
+## HITL Dashboard Requirements
+- Display pending access requests with AI recommendation, confidence score, and policy chunk citations.
+- Clearly present current user entitlements fetched from Postgres alongside target entitlement details.
+- Provide explicit "Approve", "Deny", and "Manual Override" controls.

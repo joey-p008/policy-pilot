@@ -1,0 +1,14 @@
+---
+description: Reusable procedure to scaffold a production-ready NestJS module with Zod validation, idempotency, and unit tests
+globs: "apps/backend/**/*"
+alwaysApply: false
+---
+# Skill: Create NestJS Module (@CreateNestModule)
+
+When invoked with `@CreateNestModule <module-name>`, execute the following steps:
+1. Create directory `apps/backend/src/modules/<module-name>/`.
+2. Generate `<module-name>.controller.ts` with explicit HTTP REST verbs and DTO validation guards.
+3. Generate `<module-name>.service.ts` handling business logic, idempotency checks, and database interactions.
+4. Generate `dto/<module-name>.dto.ts` containing Zod schemas and TypeScript type inferences.
+5. Create `<module-name>.spec.ts` containing unit test stubs using Jest.
+6. Register module in `apps/backend/src/app.module.ts`.

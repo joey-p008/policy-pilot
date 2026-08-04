@@ -1,0 +1,17 @@
+---
+description: Reusable procedure to execute the AI evaluation suite and format benchmark reports
+globs: "**/evals/**/*"
+alwaysApply: false
+---
+# Skill: Run AI Evals (@RunEvals)
+
+When invoked with `@RunEvals`, execute the following procedure:
+1. Run the local evaluation runner: `npm run eval`.
+2. Parse the generated report from `evals/output/report.json`.
+3. Format a markdown scorecard displaying:
+   - Total test cases evaluated
+   - Recall@k Score
+   - Grounding Accuracy %
+   - Schema Validation Success Rate %
+   - p95 Latency (ms) & Estimated USD Cost
+4. Flag any regressed prompt test cases that scored lower than previous runs.

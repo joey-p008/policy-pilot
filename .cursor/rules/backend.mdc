@@ -1,0 +1,16 @@
+---
+description: NestJS backend standards, PostgreSQL schema requirements, rate-limiting, and idempotency
+globs: "apps/backend/**/*"
+alwaysApply: false
+---
+# Backend & Database Guidelines
+
+## NestJS Architecture
+- Use modular structure (Controller -> Service -> Repository / Queue).
+- Validate all incoming REST requests and webhooks using Zod DTO schemas.
+- Exceptions: Catch all unhandled errors using NestJS Exception Filters. Never expose raw database stack traces.
+
+## Resiliency & Concurrency
+- Downstream Rate Limiting: Mock services enforce a limit of 60 req/min. Implement BullMQ queueing with exponential backoff and jitter.
+- Idempotency: All incoming access webhooks must check `request_id` against an `idempotency_keys` Postgres table before execution.
+- Audit Trail: Store state transitions in an append-only `access_audit_logs` table.

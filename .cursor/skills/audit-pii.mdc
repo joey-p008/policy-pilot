@@ -1,0 +1,12 @@
+---
+description: Reusable procedure to scan loggers, traces, and API responses for sensitive PII leakages
+globs: "**/*"
+alwaysApply: false
+---
+# Skill: Audit PII Scrubbing (@AuditPII)
+
+When invoked with `@AuditPII`, execute the following scan:
+1. Search all logger instances and telemetry interceptors in `apps/backend/` and `apps/frontend/`.
+2. Check if raw fields (`employee_id`, `cost_center`, `ssn`, `email`) are passed into unmasked log outputs.
+3. Verify that log transformers invoke the `maskPII()` utility function prior to logging.
+4. Output a summary table of compliant logger calls and list any flagged violations requiring remediation.

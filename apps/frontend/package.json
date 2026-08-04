@@ -1,0 +1,12 @@
+{
+  "name": "@policy-pilot/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit false",
+    "dev": "echo \"Frontend Vite scaffold pending\"",
+    "test": "jest --config ../../jest.config.js --passWithNoTests"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

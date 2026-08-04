@@ -1,0 +1,16 @@
+---
+description: Policy-Pilot core rules, architecture contract, and non-negotiable safety boundaries
+globs: "**/*"
+alwaysApply: true
+---
+# Policy-Pilot Core Architecture Rules
+
+## Architectural Boundaries
+1. Human-In-The-Loop (HITL): AI outputs are strictly schema-validated recommendations. No LLM action can directly mutate user access entitlements.
+2. PII Protection: Mask `employee_id` and `cost_center` across all logger calls, error filters, and telemetry pipelines.
+3. Deterministic Integrity: Use Zod or class-validator on all inputs and outputs. Never accept unvalidated JSON from external webhooks or LLM outputs.
+
+## Code Quality Standards
+- Strict TypeScript: No `any` types allowed under any circumstances.
+- Explicit Error Handling: Never swallow errors. Wrap caught exceptions in NestJS Exception Filters or return explicit error results.
+- No Placeholders: Never generate code with ellipses (`// ... rest unchanged`) or stubbed function bodies.

@@ -1,0 +1,15 @@
+---
+description: Testing standards and golden dataset evaluation metrics
+globs: "**/evals/**/*"
+alwaysApply: false
+---
+# Evals and Quality Metrics
+
+## Evaluation Suite Requirements
+- Automated eval scripts located in `evals/` must benchmark against a committed golden dataset (`evals/golden_dataset.json`).
+- Metrics tracked:
+  1. Recall@k (RAG retrieval accuracy)
+  2. Grounding Score (LLM-as-judge compliance)
+  3. Schema Validity Rate (Must be 100%)
+  4. Latency (p95) and Token Cost per request
+- Failure Gate: CI must fail if schema validity drops below 100% or grounding drops below target thresholds.
