@@ -5,6 +5,10 @@ module.exports = {
   roots: ['<rootDir>/apps', '<rootDir>/shared'],
   testMatch: ['**/*.spec.ts', '**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
+  moduleNameMapper: {
+    '^@policy-pilot/shared$': '<rootDir>/shared/pii/mask-pii.ts',
+    '^@policy-pilot/shared/(.*)$': '<rootDir>/shared/$1',
+  },
   clearMocks: true,
   collectCoverageFrom: [
     'apps/**/*.{ts,tsx}',

@@ -1,15 +1,17 @@
 ---
 description: RAG pipeline standards, prompt discipline, structured JSON output, and tool calling guardrails
-globs: "**/ai/**/*"
+globs: "apps/backend/src/modules/ai/**/*"
 alwaysApply: false
 ---
 # Gen AI & RAG Engineering Standards
 
 ## Prompt & RAG Discipline
-- Prompts must live in dedicated version-controlled config files (e.g., `apps/backend/src/ai/prompts/`).
+- Prompts must be loaded from `apps/backend/src/config/prompts/` via the typed manifest (`loadPrompt` / `PROMPT_MANIFEST`). Never hardcode system or RAG prompt strings in application code.
 - Grounding Constraint: Instruct models: *"Answer only using provided policy context chunks. If uncertain, return ESCALATE with low confidence score."*
 - Metadata Citation: RAG retrieval must preserve chunk metadata (`document_id`, `page_number`, `section_title`).
 
-## Structured Output & Tools
+## Structured Output & Observability
 - Enforce output structure using Zod schemas (decision: APPROVE|DENY|ESCALATE, rationale, policy_citations, confidence_score).
+- Every LLM invocation MUST pass through `executeWithObservability` so prompt name/version, masked I/O, tokens, latency, cost, and schema validity are recorded.
+- Strict JSON output parsing: validate model responses with Zod before returning recommendations to callers.
 - Tool Calling: Validate tool input payloads with Zod before execution. Any destructive action requires explicit human confirmation via the dashboard.

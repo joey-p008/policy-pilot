@@ -1,0 +1,17 @@
+{
+  "name": "@policy-pilot/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/pii/mask-pii.js",
+  "types": "./pii/mask-pii.ts",
+  "exports": {
+    ".": {
+      "types": "./pii/mask-pii.ts",
+      "require": "./dist/pii/mask-pii.js",
+      "default": "./dist/pii/mask-pii.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

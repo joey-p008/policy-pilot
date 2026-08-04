@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit false",
+    "build": "tsc -p tsconfig.json --noEmit false && mkdir -p dist/config/prompts && cp src/config/prompts/*.txt dist/config/prompts/",
     "start": "node dist/main.js",
     "test": "jest --config ../../jest.config.js --passWithNoTests"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@policy-pilot/shared": "*",
+    "zod": "^3.24.2"
+  },
   "devDependencies": {}
 }

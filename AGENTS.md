@@ -22,3 +22,10 @@ Policy-Pilot is a production-grade, AI-powered system that processes self-servic
 - LLM Suggests, Human Approves: The LLM produces recommendations (APPROVE/DENY/ESCALATE). It MUST NEVER execute access grants or revocations directly.
 - PII Masking: Scrub or mask `employee_id` and `cost_center` in all logs and telemetry traces.
 - Idempotency & Audit: All incoming webhooks and access execution events must use idempotency tables and append-only audit logging in Postgres.
+
+## Prompt Engineering & LLM Observability
+
+- System prompts and RAG templates must NEVER be hardcoded in application code string literals.
+- All application prompts must be stored in `apps/backend/src/config/prompts/` and versioned via semantic versioning (`*-vX.Y.Z.txt`), loaded through the typed prompt manifest (`PROMPT_MANIFEST` / `loadPrompt`).
+- All LLM calls must pass through the LLM Observability Logger wrapper (`executeWithObservability`) with Zod schema validation before any recommendation is returned to callers.
+- Observability logs must include prompt name, semantic version, masked prompts/responses, token counts, latency, estimated USD cost, and schema validity status.
