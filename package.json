@@ -13,7 +13,7 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .ts,.tsx",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit && npm --workspace=@policy-pilot/frontend exec -- tsc -p tsconfig.json --noEmit",
     "test": "jest",
     "build": "npm run build --workspaces",
     "verify": "npm run format && npm run lint && npm run type-check && npm test",

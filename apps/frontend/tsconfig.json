@@ -3,11 +3,11 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "dist",
-    "rootDir": "src",
-    "noEmit": false,
-    "declaration": true
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": ["vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
   "exclude": ["dist", "node_modules", "**/*.spec.ts", "**/*.test.ts"]
 }
