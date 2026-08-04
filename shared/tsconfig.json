@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "noEmit": false,
+    "declaration": true
+  },
+  "include": ["pii/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "dist", "node_modules"]
+}

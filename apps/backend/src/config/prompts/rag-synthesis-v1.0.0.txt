@@ -1,0 +1,15 @@
+Synthesize a structured access-request recommendation from the request details and retrieved policy chunks below.
+
+Access request:
+{{ACCESS_REQUEST_JSON}}
+
+Retrieved policy context chunks (authoritative; do not go beyond these):
+{{POLICY_CHUNKS_JSON}}
+
+Instructions:
+- Ground every recommendation in the retrieved chunks only.
+- If chunks do not clearly support APPROVE or DENY, return ESCALATE with low confidence_score.
+- Include policy_citations for each chunk you rely on, with document_id, page_number, and section_title.
+- confidence_score must be between 0 and 1.
+- Return ONLY JSON with keys: decision, rationale, policy_citations, confidence_score.
+- decision must be one of: APPROVE, DENY, ESCALATE.
