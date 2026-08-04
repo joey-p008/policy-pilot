@@ -1,0 +1,44 @@
+---
+description: Automated procedure to verify code, stage changes, commit, push to GitHub, and open a Pull Request using GitHub CLI
+globs: "**/*"
+alwaysApply: false
+---
+
+# Skill: Push to GitHub & Open Pull Request (@pushtogithub)
+
+When invoked via `@pushtogithub` or `@pushtogithub [optional custom feature title]`, execute the following step-by-step workflow:
+
+## Step 1: Quality Gate & Verification
+1. Run local checks to ensure code quality before staging:
+   Execute `npm run verify` (or `npm run format && npm run lint && npm run type-check && npm test`).
+2. If any step fails, STOP immediately. Report the exact error output to the chat and wait for fixes. DO NOT stage or push broken code.
+
+## Step 2: Branch Safety & Creation
+1. Check current active branch: `git branch --show-current`.
+2. If currently on `main` or `master`:
+   - Inspect `git status` and `git diff` to understand recent changes.
+   - Automatically create and checkout a descriptive feature/fix branch:
+     `git checkout -b <feat|fix|refactor>/<short-descriptive-kebab-case-name>`
+
+## Step 3: Stage & Conventional Commit
+1. Stage all changes: `git add .`
+2. Analyze `git diff --staged` and generate a Conventional Commit message:
+   - Header format: `type(scope): concise imperative summary` (e.g., `feat(backend): add access request ingestion endpoint`)
+   - Body format: Bulleted list summarizing core architectural changes.
+3. Execute the commit: `git commit -m "<header>" -m "<body>"`
+
+## Step 4: Push Branch to Remote
+1. Push the branch setting remote tracking:
+   `git push -u origin HEAD`
+
+## Step 5: Open GitHub Pull Request via `gh` CLI
+1. Verify `gh` CLI availability: `gh auth status`
+2. Create Pull Request using `gh pr create`:
+   - Title: Matching conventional commit format.
+   - Body markdown content including:
+     - **Summary**: Concise overview of changes made.
+     - **Verification**: Status of automated tests and linter checks.
+     - **Architectural Notes**: Any schema or API impact.
+3. Command syntax:
+   `gh pr create --title "<PR Title>" --body "<Generated Markdown Body>"`
+4. Print the final GitHub Pull Request URL directly to the user in chat.
