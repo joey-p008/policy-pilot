@@ -3,15 +3,27 @@ import { IdempotencyKey, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma.service';
 
-export interface UpsertIdempotencyKeyInput {
+export interface CreateIdempotencyKeyInput {
   requestId: string;
   endpoint: string;
   responsePayload: Prisma.InputJsonValue;
 }
 
+export type UpsertIdempotencyKeyInput = CreateIdempotencyKeyInput;
+
 @Injectable()
 export class IdempotencyKeyRepository {
   public constructor(private readonly prisma: PrismaService) {}
+
+  public async create(input: CreateIdempotencyKeyInput): Promise<IdempotencyKey> {
+    return this.prisma.idempotencyKey.create({
+      data: {
+        requestId: input.requestId,
+        endpoint: input.endpoint,
+        responsePayload: input.responsePayload,
+      },
+    });
+  }
 
   public async upsert(input: UpsertIdempotencyKeyInput): Promise<IdempotencyKey> {
     return this.prisma.idempotencyKey.upsert({
