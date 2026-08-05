@@ -7,6 +7,7 @@ import {
   ACCESS_REQUEST_QUEUE,
   ACCESS_REQUEST_WORKER_CONCURRENCY,
   ACCESS_REQUEST_WORKER_ENDPOINT,
+  ACCESS_REQUEST_WORKER_LIMITER,
   buildWorkerIdempotencyRequestId,
 } from './access-requests.constants';
 import { AccessRequestDto } from './dto/access-requests.dto';
@@ -18,7 +19,13 @@ export interface AccessRequestProcessedResponse {
 }
 
 @Injectable()
-@Processor(ACCESS_REQUEST_QUEUE, { concurrency: ACCESS_REQUEST_WORKER_CONCURRENCY })
+@Processor(ACCESS_REQUEST_QUEUE, {
+  concurrency: ACCESS_REQUEST_WORKER_CONCURRENCY,
+  limiter: {
+    max: ACCESS_REQUEST_WORKER_LIMITER.max,
+    duration: ACCESS_REQUEST_WORKER_LIMITER.duration,
+  },
+})
 export class AccessRequestWorker extends WorkerHost {
   private readonly logger = new Logger(AccessRequestWorker.name);
 

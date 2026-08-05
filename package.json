@@ -15,6 +15,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit && npm --workspace=@policy-pilot/frontend exec -- tsc -p tsconfig.json --noEmit",
     "test": "jest",
+    "test:integration": "jest --config jest.integration.config.js --runInBand",
     "build": "npm run build --workspaces",
     "verify": "npm run format && npm run lint && npm run type-check && npm test",
     "prepare": "husky"

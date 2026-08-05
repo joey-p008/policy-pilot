@@ -1,11 +1,19 @@
 import { Injectable } from '@nestjs/common';
 
-export const MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE = 60;
-export const MOCK_DOWNSTREAM_WINDOW_MS = 60_000;
+import {
+  DOWNSTREAM_RATE_LIMIT_MAX,
+  DOWNSTREAM_RATE_LIMIT_WINDOW_MS,
+} from '../../config/rate-limit.config';
+
+export const MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE = DOWNSTREAM_RATE_LIMIT_MAX;
+export const MOCK_DOWNSTREAM_WINDOW_MS = DOWNSTREAM_RATE_LIMIT_WINDOW_MS;
 
 export class MockDownstreamRateLimitError extends Error {
   public constructor() {
-    super('Mock downstream rate limit exceeded (60 req/min)');
+    super(
+      `Mock downstream rate limit exceeded (${MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE} req / ` +
+        `${MOCK_DOWNSTREAM_WINDOW_MS}ms)`,
+    );
     this.name = 'MockDownstreamRateLimitError';
   }
 }
