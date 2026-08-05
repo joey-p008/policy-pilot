@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AccessRequestsModule } from './modules/access-requests/access-requests.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { IdempotencyModule } from './modules/idempotency/idempotency.module';
@@ -15,6 +16,7 @@ import { IdempotencyModule } from './modules/idempotency/idempotency.module';
     DatabaseModule,
     IdempotencyModule,
     AuditLogModule,
+    AccessRequestsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
