@@ -36,12 +36,13 @@ describe('AccessRequestsController', () => {
     await app.close();
   });
 
-  it('is mounted and accepts a valid access-request webhook payload', async () => {
+  it('returns 202 Accepted with a status polling URI after queue dispatch', async () => {
     const accepted: AccessRequestHandleResult = {
       replayed: false,
       response: {
         status: 'accepted',
         requestId: 'req-100',
+        statusUrl: '/access-requests/req-100/status',
       },
     };
     handleIncoming.mockResolvedValue(accepted);
@@ -53,9 +54,10 @@ describe('AccessRequestsController', () => {
         employeeId: 'emp-42',
         targetEntitlement: 'vpn-access',
       })
-      .expect(201);
+      .expect(202);
 
     expect(response.body).toEqual(accepted);
+    expect(response.body.response.statusUrl).toMatch(/^\/access-requests\/[^/]+\/status$/);
     expect(handleIncoming).toHaveBeenCalledTimes(1);
     expect(handleIncoming).toHaveBeenCalledWith({
       requestId: 'req-100',
