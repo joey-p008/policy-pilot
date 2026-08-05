@@ -9,6 +9,7 @@ import { AccessRequestsModule } from './modules/access-requests/access-requests.
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { IdempotencyModule } from './modules/idempotency/idempotency.module';
+import { QueueModule } from './modules/queue/queue.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { IdempotencyModule } from './modules/idempotency/idempotency.module';
       isGlobal: true,
     }),
     DatabaseModule,
+    QueueModule,
     IdempotencyModule,
     AuditLogModule,
     AccessRequestsModule,

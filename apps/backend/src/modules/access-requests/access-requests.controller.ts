@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { AccessRequestsService, AccessRequestHandleResult } from './access-requests.service';
@@ -10,6 +10,7 @@ export class AccessRequestsController {
   public constructor(private readonly accessRequestsService: AccessRequestsService) {}
 
   @Post()
+  @HttpCode(HttpStatus.ACCEPTED)
   public async create(
     @Body(new ZodValidationPipe(accessRequestSchema)) body: AccessRequestDto,
   ): Promise<AccessRequestHandleResult> {

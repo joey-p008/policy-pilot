@@ -1,13 +1,20 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
+import { Queue } from 'bullmq';
 
 import { IdempotencyService } from '../idempotency/idempotency.service';
+import {
+  ACCESS_REQUEST_JOB_NAME,
+  ACCESS_REQUEST_QUEUE,
+  ACCESS_REQUESTS_WEBHOOK_ENDPOINT,
+  buildAccessRequestStatusUrl,
+} from './access-requests.constants';
 import { AccessRequestDto } from './dto/access-requests.dto';
-
-export const ACCESS_REQUESTS_WEBHOOK_ENDPOINT = '/webhooks/access-requests';
 
 export interface AccessRequestAcceptedResponse {
   status: 'accepted';
   requestId: string;
+  statusUrl: string;
 }
 
 export interface AccessRequestHandleResult {
@@ -15,18 +22,42 @@ export interface AccessRequestHandleResult {
   response: AccessRequestAcceptedResponse;
 }
 
+const BASE_BACKOFF_DELAY_MS = 1000;
+const MAX_JITTER_MS = 250;
+
+function backoffDelayWithJitter(): number {
+  const jitter = Math.floor(Math.random() * (MAX_JITTER_MS + 1));
+  return BASE_BACKOFF_DELAY_MS + jitter;
+}
+
 @Injectable()
 export class AccessRequestsService {
-  public constructor(private readonly idempotencyService: IdempotencyService) {}
+  public constructor(
+    private readonly idempotencyService: IdempotencyService,
+    @InjectQueue(ACCESS_REQUEST_QUEUE)
+    private readonly accessRequestQueue: Queue<AccessRequestDto>,
+  ) {}
 
   public async handleIncoming(dto: AccessRequestDto): Promise<AccessRequestHandleResult> {
     return this.idempotencyService.executeIdempotent({
       requestId: dto.requestId,
       endpoint: ACCESS_REQUESTS_WEBHOOK_ENDPOINT,
-      execute: async (): Promise<AccessRequestAcceptedResponse> => ({
-        status: 'accepted',
-        requestId: dto.requestId,
-      }),
+      execute: async (): Promise<AccessRequestAcceptedResponse> => {
+        await this.accessRequestQueue.add(ACCESS_REQUEST_JOB_NAME, dto, {
+          jobId: dto.requestId,
+          attempts: 5,
+          backoff: {
+            type: 'exponential',
+            delay: backoffDelayWithJitter(),
+          },
+        });
+
+        return {
+          status: 'accepted',
+          requestId: dto.requestId,
+          statusUrl: buildAccessRequestStatusUrl(dto.requestId),
+        };
+      },
     });
   }
 }

@@ -14,6 +14,7 @@
     "seed": "ts-node --transpile-only prisma/seed.ts"
   },
   "dependencies": {
+    "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.12",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.12",
@@ -21,6 +22,8 @@
     "@policy-pilot/shared": "*",
     "@policy-pilot/shared-types": "*",
     "@prisma/client": "^6.19.3",
+    "bullmq": "^5.81.3",
+    "ioredis": "^6.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^3.24.2"
