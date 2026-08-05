@@ -6,6 +6,7 @@
     "build": "tsc -p tsconfig.json --noEmit false && mkdir -p dist/config/prompts && cp src/config/prompts/*.txt dist/config/prompts/",
     "start": "node dist/main.js",
     "test": "jest --config ../../jest.config.js --passWithNoTests",
+    "test:integration": "jest --config ../../jest.integration.config.js --runInBand",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate"
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@nestjs/testing": "^11.1.28",
     "@types/supertest": "^7.2.1",
+    "dotenv": "^17.4.2",
     "prisma": "^6.19.3",
     "supertest": "^7.2.2"
   }

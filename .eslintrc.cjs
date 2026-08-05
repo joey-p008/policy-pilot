@@ -22,6 +22,7 @@ module.exports = {
     '.cursor/',
     '*.cjs',
     'jest.config.js',
+    'jest.integration.config.js',
   ],
   rules: {
     '@typescript-eslint/no-explicit-any': 'error',
