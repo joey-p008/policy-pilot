@@ -10,6 +10,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate"
   },
+  "prisma": {
+    "seed": "ts-node --transpile-only prisma/seed.ts"
+  },
   "dependencies": {
     "@nestjs/common": "^11.0.12",
     "@nestjs/config": "^4.0.2",
