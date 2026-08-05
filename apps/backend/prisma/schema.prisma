@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(uuid()) @db.Uuid
+  employeeIdHash String          @unique @map("employee_id_hash")
+  department     String
+  costCenterHash String          @map("cost_center_hash")
+  role           String
+  entitlements   Entitlement[]
+  auditLogs      AccessAuditLog[] @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Entitlement {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  resourceName    String    @map("resource_name")
+  permissionLevel String    @map("permission_level")
+  expiresAt       DateTime? @map("expires_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("entitlements")
+}
+
+model IdempotencyKey {
+  requestId       String   @id @map("request_id")
+  endpoint        String
+  responsePayload Json     @map("response_payload")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("idempotency_keys")
+}
+
+model AccessAuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  requestId     String   @map("request_id")
+  actorId       String   @map("actor_id") @db.Uuid
+  action        String
+  previousState Json     @map("previous_state")
+  newState      Json     @map("new_state")
+  timestamp     DateTime @default(now())
+  actor         User     @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([requestId])
+  @@map("access_audit_logs")
+}

@@ -5,7 +5,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit false && mkdir -p dist/config/prompts && cp src/config/prompts/*.txt dist/config/prompts/",
     "start": "node dist/main.js",
-    "test": "jest --config ../../jest.config.js --passWithNoTests"
+    "test": "jest --config ../../jest.config.js --passWithNoTests",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate": "prisma generate"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.12",
@@ -14,9 +17,12 @@
     "@nestjs/platform-express": "^11.0.12",
     "@policy-pilot/shared": "*",
     "@policy-pilot/shared-types": "*",
+    "@prisma/client": "^6.19.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^3.24.2"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "prisma": "^6.19.3"
+  }
 }
