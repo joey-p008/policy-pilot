@@ -4,9 +4,11 @@ import { Queue } from 'bullmq';
 
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import {
+  ACCESS_REQUEST_JOB_ATTEMPTS,
   ACCESS_REQUEST_JOB_NAME,
   ACCESS_REQUEST_QUEUE,
   ACCESS_REQUESTS_WEBHOOK_ENDPOINT,
+  buildAccessRequestBackoffDelayMs,
   buildAccessRequestStatusUrl,
 } from './access-requests.constants';
 import { AccessRequestDto } from './dto/access-requests.dto';
@@ -20,14 +22,6 @@ export interface AccessRequestAcceptedResponse {
 export interface AccessRequestHandleResult {
   replayed: boolean;
   response: AccessRequestAcceptedResponse;
-}
-
-const BASE_BACKOFF_DELAY_MS = 1000;
-const MAX_JITTER_MS = 250;
-
-function backoffDelayWithJitter(): number {
-  const jitter = Math.floor(Math.random() * (MAX_JITTER_MS + 1));
-  return BASE_BACKOFF_DELAY_MS + jitter;
 }
 
 @Injectable()
@@ -45,10 +39,10 @@ export class AccessRequestsService {
       execute: async (): Promise<AccessRequestAcceptedResponse> => {
         await this.accessRequestQueue.add(ACCESS_REQUEST_JOB_NAME, dto, {
           jobId: dto.requestId,
-          attempts: 5,
+          attempts: ACCESS_REQUEST_JOB_ATTEMPTS,
           backoff: {
             type: 'exponential',
-            delay: backoffDelayWithJitter(),
+            delay: buildAccessRequestBackoffDelayMs(),
           },
         });
 
