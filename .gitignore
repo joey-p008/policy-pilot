@@ -9,3 +9,4 @@ evals/output/
 .DS_Store
 .turbo/
 *.tsbuildinfo
+apps/backend/data/policies/*.pdf
