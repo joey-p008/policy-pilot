@@ -6,6 +6,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AccessRequestsModule } from './modules/access-requests/access-requests.module';
+import { AiModule } from './modules/ai/ai.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { IdempotencyModule } from './modules/idempotency/idempotency.module';
@@ -21,6 +22,7 @@ import { QueueModule } from './modules/queue/queue.module';
     IdempotencyModule,
     AuditLogModule,
     AccessRequestsModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [
