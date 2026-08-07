@@ -17,3 +17,10 @@ export const ChunkDocumentInputSchema = z.object({
 });
 
 export type ChunkDocumentInput = z.infer<typeof ChunkDocumentInputSchema>;
+
+export const IngestPoliciesResultSchema = z.object({
+  documentsProcessed: z.number().int().nonnegative(),
+  chunksInserted: z.number().int().nonnegative(),
+});
+
+export type IngestPoliciesResult = z.infer<typeof IngestPoliciesResultSchema>;

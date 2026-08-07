@@ -19,10 +19,18 @@ export {
 export { DocumentIngestionService } from './document-ingestion.service';
 export {
   ChunkDocumentInputSchema,
+  IngestPoliciesResultSchema,
   PolicyDocumentChunkSchema,
   type ChunkDocumentInput,
+  type IngestPoliciesResult,
   type PolicyDocumentChunk,
 } from './dto/document-ingestion.dto';
+export {
+  EMBEDDING_CLIENT,
+  EMBEDDING_DIMENSIONS,
+  type EmbeddingClient,
+} from './embedding/embedding.types';
+export { OpenAiEmbeddingClient } from './embedding/openai-embedding.client';
 
 export {
   PolicyCitationSchema,
