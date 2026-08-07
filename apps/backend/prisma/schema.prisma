@@ -53,3 +53,15 @@ model AccessAuditLog {
   @@index([requestId])
   @@map("access_audit_logs")
 }
+
+model PolicyChunk {
+  id           String                      @id @default(uuid()) @db.Uuid
+  documentId   String                      @map("document_id")
+  pageNumber   Int                         @map("page_number")
+  sectionTitle String                      @map("section_title")
+  content      String
+  embedding    Unsupported("vector(1536)")
+
+  @@index([documentId])
+  @@map("policy_chunks")
+}
