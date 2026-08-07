@@ -9,6 +9,21 @@ export {
   type PromptMetadata,
 } from '../../config/prompts';
 
+export { AiModule } from './ai.module';
+export {
+  DEFAULT_SECTION_TITLE,
+  DOCUMENT_CHUNK_OVERLAP,
+  DOCUMENT_CHUNK_SIZE,
+  DocumentChunker,
+} from './document-chunker';
+export { DocumentIngestionService } from './document-ingestion.service';
+export {
+  ChunkDocumentInputSchema,
+  PolicyDocumentChunkSchema,
+  type ChunkDocumentInput,
+  type PolicyDocumentChunk,
+} from './dto/document-ingestion.dto';
+
 export {
   PolicyCitationSchema,
   RecommendationDecisionSchema,
