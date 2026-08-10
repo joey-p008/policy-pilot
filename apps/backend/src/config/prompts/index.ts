@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export type PromptKey = 'system-policy' | 'rag-synthesis';
+export type PromptKey = 'system-policy' | 'rag-synthesis' | 'eval-grounding-judge';
 
 export interface PromptManifestEntry {
   readonly version: string;
@@ -17,11 +17,16 @@ export const PROMPT_MANIFEST = {
     version: '1.0.0',
     fileName: 'rag-synthesis-v1.0.0.txt',
   },
+  'eval-grounding-judge': {
+    version: '1.0.0',
+    fileName: 'eval-grounding-judge-v1.0.0.txt',
+  },
 } as const satisfies Record<PromptKey, PromptManifestEntry>;
 
 export const ACTIVE_PROMPT_VERSIONS: Readonly<Record<PromptKey, string>> = {
   'system-policy': PROMPT_MANIFEST['system-policy'].version,
   'rag-synthesis': PROMPT_MANIFEST['rag-synthesis'].version,
+  'eval-grounding-judge': PROMPT_MANIFEST['eval-grounding-judge'].version,
 };
 
 export interface PromptMetadata {

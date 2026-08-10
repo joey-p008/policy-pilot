@@ -11,12 +11,16 @@ describe('prompt loader', () => {
   it('resolves active semantic versions from the manifest', () => {
     expect(ACTIVE_PROMPT_VERSIONS['system-policy']).toBe('1.1.0');
     expect(ACTIVE_PROMPT_VERSIONS['rag-synthesis']).toBe('1.0.0');
+    expect(ACTIVE_PROMPT_VERSIONS['eval-grounding-judge']).toBe('1.0.0');
     expect(PROMPT_MANIFEST['system-policy'].fileName).toBe('system-policy-v1.1.0.txt');
     expect(PROMPT_MANIFEST['rag-synthesis'].fileName).toBe('rag-synthesis-v1.0.0.txt');
+    expect(PROMPT_MANIFEST['eval-grounding-judge'].fileName).toBe(
+      'eval-grounding-judge-v1.0.0.txt',
+    );
   });
 
   it('loads prompt metadata and disk content for known keys', () => {
-    const keys: PromptKey[] = ['system-policy', 'rag-synthesis'];
+    const keys: PromptKey[] = ['system-policy', 'rag-synthesis', 'eval-grounding-judge'];
 
     for (const key of keys) {
       const metadata = getPromptMetadata(key);
@@ -34,6 +38,7 @@ describe('prompt loader', () => {
     expect(listActivePromptVersions()).toEqual([
       { key: 'system-policy', version: '1.1.0' },
       { key: 'rag-synthesis', version: '1.0.0' },
+      { key: 'eval-grounding-judge', version: '1.0.0' },
     ]);
   });
 
