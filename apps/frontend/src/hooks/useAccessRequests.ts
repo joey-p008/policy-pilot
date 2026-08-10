@@ -1,5 +1,6 @@
 import type {
   AccessRequestDecisionPayload,
+  CreateAccessRequestPayload,
   PendingAccessRequest,
 } from '@policy-pilot/shared-types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,7 +8,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ACCESS_REQUESTS_PENDING_QUERY_KEY,
   approveAccessRequest,
+  createAccessRequest,
   denyAccessRequest,
+  escalateAccessRequest,
   fetchPendingAccessRequests,
 } from '../api/access-requests';
 
@@ -30,7 +33,9 @@ function removeRequestFromPendingCache(
   return previousPending;
 }
 
-function useDecisionMutation(mutationFn: typeof approveAccessRequest | typeof denyAccessRequest) {
+function useDecisionMutation(
+  mutationFn: typeof approveAccessRequest | typeof denyAccessRequest | typeof escalateAccessRequest,
+) {
   const queryClient = useQueryClient();
 
   return useMutation<
@@ -63,10 +68,29 @@ export function usePendingRequests() {
   });
 }
 
+export function useSubmitAccessRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: CreateAccessRequestPayload) => createAccessRequest(payload),
+    onSuccess: async (created) => {
+      queryClient.setQueryData<PendingAccessRequest[]>(
+        ACCESS_REQUESTS_PENDING_QUERY_KEY,
+        (current) => [created, ...(current ?? [])],
+      );
+      await queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
+    },
+  });
+}
+
 export function useApproveRequest() {
   return useDecisionMutation(approveAccessRequest);
 }
 
 export function useDenyRequest() {
   return useDecisionMutation(denyAccessRequest);
+}
+
+export function useEscalateRequest() {
+  return useDecisionMutation(escalateAccessRequest);
 }

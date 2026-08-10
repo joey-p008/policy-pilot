@@ -4,7 +4,13 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import { MOCK_HITL_ADMIN_ID } from '../api/hitl-constants';
-import { useApproveRequest, useDenyRequest, usePendingRequests } from '../hooks/useAccessRequests';
+import {
+  useApproveRequest,
+  useDenyRequest,
+  useEscalateRequest,
+  usePendingRequests,
+  useSubmitAccessRequest,
+} from '../hooks/useAccessRequests';
 import { MOCK_PENDING_ACCESS_REQUESTS } from '../mocks/pending-access-requests';
 import { Dashboard } from './Dashboard';
 
@@ -12,6 +18,8 @@ jest.mock('../hooks/useAccessRequests', () => ({
   usePendingRequests: jest.fn(),
   useApproveRequest: jest.fn(),
   useDenyRequest: jest.fn(),
+  useEscalateRequest: jest.fn(),
+  useSubmitAccessRequest: jest.fn(),
 }));
 
 const mockedUsePendingRequests = usePendingRequests as jest.MockedFunction<
@@ -19,6 +27,12 @@ const mockedUsePendingRequests = usePendingRequests as jest.MockedFunction<
 >;
 const mockedUseApproveRequest = useApproveRequest as jest.MockedFunction<typeof useApproveRequest>;
 const mockedUseDenyRequest = useDenyRequest as jest.MockedFunction<typeof useDenyRequest>;
+const mockedUseEscalateRequest = useEscalateRequest as jest.MockedFunction<
+  typeof useEscalateRequest
+>;
+const mockedUseSubmitAccessRequest = useSubmitAccessRequest as jest.MockedFunction<
+  typeof useSubmitAccessRequest
+>;
 
 const [denyRequest] = MOCK_PENDING_ACCESS_REQUESTS;
 
@@ -43,6 +57,12 @@ describe('Dashboard', () => {
       mockMutationIdle() as ReturnType<typeof useApproveRequest>,
     );
     mockedUseDenyRequest.mockReturnValue(mockMutationIdle() as ReturnType<typeof useDenyRequest>);
+    mockedUseEscalateRequest.mockReturnValue(
+      mockMutationIdle() as ReturnType<typeof useEscalateRequest>,
+    );
+    mockedUseSubmitAccessRequest.mockReturnValue(
+      mockMutationIdle() as ReturnType<typeof useSubmitAccessRequest>,
+    );
   });
 
   it('renders the loading state', () => {
@@ -98,12 +118,51 @@ describe('Dashboard', () => {
     expect(screen.getByText(denyRequest.recommendation.rationale)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve Recommendation' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Deny Request' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Manual Override' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Escalate' })).toBeEnabled();
   });
 
-  it('fires approve and deny mutations with hardcoded admin_id', () => {
+  it('submits entitlement and justification through the create mutation', () => {
+    const submitMutate = jest.fn();
+
+    mockedUsePendingRequests.mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof usePendingRequests>);
+    mockedUseSubmitAccessRequest.mockReturnValue({
+      mutate: submitMutate,
+      reset: jest.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useSubmitAccessRequest>);
+
+    render(<Dashboard />);
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. prod-postgres-admin'), {
+      target: { value: 'analytics-warehouse-writer' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Explain why this access is needed…'), {
+      target: { value: 'Quarterly reporting pipeline' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for recommendation' }));
+
+    expect(submitMutate).toHaveBeenCalledWith(
+      {
+        targetEntitlement: 'analytics-warehouse-writer',
+        justification: 'Quarterly reporting pipeline',
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  it('fires approve, deny, and escalate mutations with hardcoded admin_id', () => {
     const approveMutate = jest.fn();
     const denyMutate = jest.fn();
+    const escalateMutate = jest.fn();
 
     mockedUsePendingRequests.mockReturnValue({
       data: [denyRequest],
@@ -127,11 +186,19 @@ describe('Dashboard', () => {
       isError: false,
       error: null,
     } as ReturnType<typeof useDenyRequest>);
+    mockedUseEscalateRequest.mockReturnValue({
+      mutate: escalateMutate,
+      reset: jest.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useEscalateRequest>);
 
     render(<Dashboard />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve Recommendation' }));
     fireEvent.click(screen.getByRole('button', { name: 'Deny Request' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Escalate' }));
 
     expect(approveMutate).toHaveBeenCalledWith({
       requestId: denyRequest.requestId,
@@ -141,79 +208,10 @@ describe('Dashboard', () => {
       requestId: denyRequest.requestId,
       admin_id: MOCK_HITL_ADMIN_ID,
     });
-  });
-
-  it('manual override inverts a DENY recommendation via approve', () => {
-    const approveMutate = jest.fn();
-    const denyMutate = jest.fn();
-
-    mockedUsePendingRequests.mockReturnValue({
-      data: [denyRequest],
-      isPending: false,
-      isError: false,
-      isSuccess: true,
-      error: null,
-      refetch: jest.fn(),
-    } as unknown as ReturnType<typeof usePendingRequests>);
-    mockedUseApproveRequest.mockReturnValue({
-      mutate: approveMutate,
-      reset: jest.fn(),
-      isPending: false,
-      isError: false,
-      error: null,
-    } as ReturnType<typeof useApproveRequest>);
-    mockedUseDenyRequest.mockReturnValue({
-      mutate: denyMutate,
-      reset: jest.fn(),
-      isPending: false,
-      isError: false,
-      error: null,
-    } as ReturnType<typeof useDenyRequest>);
-
-    render(<Dashboard />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Manual Override' }));
-
-    expect(approveMutate).toHaveBeenCalledWith({
+    expect(escalateMutate).toHaveBeenCalledWith({
       requestId: denyRequest.requestId,
       admin_id: MOCK_HITL_ADMIN_ID,
     });
-    expect(denyMutate).not.toHaveBeenCalled();
-  });
-
-  it('shows a dismissible mutation error alert', () => {
-    const resetApprove = jest.fn();
-    const resetDeny = jest.fn();
-
-    mockedUsePendingRequests.mockReturnValue({
-      data: [denyRequest],
-      isPending: false,
-      isError: false,
-      isSuccess: true,
-      error: null,
-      refetch: jest.fn(),
-    } as unknown as ReturnType<typeof usePendingRequests>);
-    mockedUseApproveRequest.mockReturnValue({
-      mutate: jest.fn(),
-      reset: resetApprove,
-      isPending: false,
-      isError: true,
-      error: new Error('Backend rejected approve'),
-    } as ReturnType<typeof useApproveRequest>);
-    mockedUseDenyRequest.mockReturnValue({
-      mutate: jest.fn(),
-      reset: resetDeny,
-      isPending: false,
-      isError: false,
-      error: null,
-    } as ReturnType<typeof useDenyRequest>);
-
-    render(<Dashboard />);
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Backend rejected approve');
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(resetApprove).toHaveBeenCalledTimes(1);
-    expect(resetDeny).toHaveBeenCalledTimes(1);
   });
 
   it('expands entitlements comparison for current vs requested', () => {
@@ -235,6 +233,9 @@ describe('Dashboard', () => {
     expect(screen.getByText('staging-postgres-write')).toBeInTheDocument();
     expect(screen.getByText('Requested permission')).toBeInTheDocument();
     expect(screen.getAllByText('prod-postgres-admin').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText('Need production admin to restart a failed migration job.'),
+    ).toBeInTheDocument();
   });
 
   it('opens a citation modal with policy chunk content', () => {

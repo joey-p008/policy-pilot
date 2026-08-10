@@ -56,6 +56,7 @@ describe('DecisionEngineService', () => {
       request: {
         requestId: 'req-42',
         targetEntitlement: 'prod-postgres-admin',
+        justification: 'Emergency production incident response',
       },
       policyChunks,
     });
@@ -64,6 +65,7 @@ describe('DecisionEngineService', () => {
     expect(mockChatClient.complete).toHaveBeenCalledTimes(1);
     const assembledPrompt = mockChatClient.complete.mock.calls[0]?.[0] ?? '';
     expect(assembledPrompt).toContain('prod-postgres-admin');
+    expect(assembledPrompt).toContain('Emergency production incident response');
     expect(assembledPrompt).not.toContain('employeeId');
   });
 
@@ -79,6 +81,7 @@ describe('DecisionEngineService', () => {
         request: {
           requestId: 'req-43',
           targetEntitlement: 'prod-postgres-admin',
+          justification: 'Need admin for deploy',
         },
         policyChunks,
       }),
@@ -97,6 +100,7 @@ describe('DecisionEngineService', () => {
         request: {
           requestId: 'req-44',
           targetEntitlement: 'prod-postgres-admin',
+          justification: 'Need admin for deploy',
         },
         policyChunks,
       }),

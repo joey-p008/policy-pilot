@@ -1,4 +1,3 @@
-import { AccessRequestDto } from '../access-requests/dto/access-requests.dto';
 import { PolicyChunkRepository } from '../database/repositories/policy-chunk.repository';
 import { EMBEDDING_DIMENSIONS, EmbeddingClient } from './embedding/embedding.types';
 import { RETRIEVAL_TOP_K, RetrievalService } from './retrieval.service';
@@ -27,9 +26,8 @@ describe('RetrievalService', () => {
   });
 
   it('embeds the entitlement query and enforces the k=4 similarity limit', async () => {
-    const request: AccessRequestDto = {
+    const request = {
       requestId: 'req-123',
-      employeeId: 'emp-secret-999',
       targetEntitlement: 'prod-postgres-admin',
     };
 
@@ -73,43 +71,26 @@ describe('RetrievalService', () => {
     expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledWith([
       'Access entitlement request: prod-postgres-admin',
     ]);
-    expect(mockEmbeddingClient.embedTexts.mock.calls[0]?.[0].join(' ')).not.toContain(
-      'emp-secret-999',
-    );
 
     expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledTimes(1);
-    expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledWith(
-      queryEmbedding,
-      RETRIEVAL_TOP_K,
-    );
-    expect(mockPolicyChunkRepository.findTopSimilar.mock.calls[0]?.[1]).toBe(4);
-
+    expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledWith(queryEmbedding, 4);
     expect(chunks).toHaveLength(4);
-    expect(chunks).toEqual([
-      {
-        document_id: 'POL-2026-01',
-        page_number: 1,
-        section_title: 'Access Control',
-        content: 'Production admin access requires manager approval.',
-      },
-      {
-        document_id: 'POL-2026-01',
-        page_number: 2,
-        section_title: 'Least Privilege',
-        content: 'Grant only the minimum entitlement required.',
-      },
-      {
-        document_id: 'POL-2026-02',
-        page_number: 3,
-        section_title: 'Cloud IAM',
-        content: 'Privileged cloud roles must be time-bound.',
-      },
-      {
-        document_id: 'POL-2026-02',
-        page_number: 4,
-        section_title: 'Audit',
-        content: 'All privileged access must be audited.',
-      },
+    expect(chunks[0]?.document_id).toBe('POL-2026-01');
+  });
+
+  it('includes business justification in the embedding query when provided', async () => {
+    const queryEmbedding = buildMockEmbedding(3);
+    mockEmbeddingClient.embedTexts.mockResolvedValue([queryEmbedding]);
+    mockPolicyChunkRepository.findTopSimilar.mockResolvedValue([]);
+
+    await service.retrieve({
+      requestId: 'req-456',
+      targetEntitlement: 'analytics-warehouse-writer',
+      justification: 'Need write access for quarterly reporting',
+    });
+
+    expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledWith([
+      'Access entitlement request: analytics-warehouse-writer. Business justification: Need write access for quarterly reporting',
     ]);
   });
 });

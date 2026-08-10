@@ -17,6 +17,8 @@ const HASHES = {
 const IDS = {
   userA: '8d0504b3-0e57-454a-833f-1c22aec8089b',
   userB: '041aa56a-3752-44ec-a157-436d4f30328f',
+  /** Stable HITL admin actor mapped from API admin_id "admin-123". */
+  adminUser: 'f1c2a3b4-5d6e-4789-a012-3456789abcde',
   entitlementA: 'a36e7537-953c-423e-9dd3-b6fa2edc6d4a',
   entitlementB: '5b871d1a-fc1c-4914-9c00-81a988cdfbdd',
   auditA: '82584cee-6bae-40dd-b620-e16c4613e06d',
@@ -57,6 +59,23 @@ async function main(): Promise<void> {
       department: 'Security',
       costCenterHash: HASHES.costCenter200,
       role: 'approver',
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { id: IDS.adminUser },
+    create: {
+      id: IDS.adminUser,
+      employeeIdHash: 'a11a1111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      department: 'Security',
+      costCenterHash: HASHES.costCenter200,
+      role: 'hitl_admin',
+    },
+    update: {
+      employeeIdHash: 'a11a1111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      department: 'Security',
+      costCenterHash: HASHES.costCenter200,
+      role: 'hitl_admin',
     },
   });
 

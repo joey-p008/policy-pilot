@@ -1,11 +1,16 @@
 import type {
   AccessRequestDecisionPayload,
   AccessRequestDecisionResult,
+  CreateAccessRequestPayload,
   PendingAccessRequest,
 } from '@policy-pilot/shared-types';
 
 import { apiClient } from '../lib/apiClient';
-import { applyMockDecision, getMockPendingAccessRequests } from '../mocks/pending-access-requests';
+import {
+  applyMockDecision,
+  createMockAccessRequest,
+  getMockPendingAccessRequests,
+} from '../mocks/pending-access-requests';
 
 export const ACCESS_REQUESTS_PENDING_QUERY_KEY = ['access-requests', 'pending'] as const;
 export { MOCK_HITL_ADMIN_ID } from './hitl-constants';
@@ -20,6 +25,17 @@ export async function fetchPendingAccessRequests(): Promise<PendingAccessRequest
   }
 
   const response = await apiClient.get<PendingAccessRequest[]>('/access-requests/pending');
+  return response.data;
+}
+
+export async function createAccessRequest(
+  payload: CreateAccessRequestPayload,
+): Promise<PendingAccessRequest> {
+  if (shouldUseHitlMockData()) {
+    return createMockAccessRequest(payload);
+  }
+
+  const response = await apiClient.post<PendingAccessRequest>('/access-requests', payload);
   return response.data;
 }
 
@@ -46,6 +62,20 @@ export async function denyAccessRequest(
 
   const response = await apiClient.post<AccessRequestDecisionResult>(
     `/access-requests/${payload.requestId}/deny`,
+    { admin_id: payload.admin_id },
+  );
+  return response.data;
+}
+
+export async function escalateAccessRequest(
+  payload: AccessRequestDecisionPayload,
+): Promise<AccessRequestDecisionResult> {
+  if (shouldUseHitlMockData()) {
+    return applyMockDecision(payload, 'escalated');
+  }
+
+  const response = await apiClient.post<AccessRequestDecisionResult>(
+    `/access-requests/${payload.requestId}/escalate`,
     { admin_id: payload.admin_id },
   );
   return response.data;

@@ -1,7 +1,9 @@
 import type {
   AccessRequestDecisionPayload,
   AccessRequestDecisionResult,
+  CreateAccessRequestPayload,
   PendingAccessRequest,
+  RecommendationDecision,
 } from '@policy-pilot/shared-types';
 
 export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
@@ -9,6 +11,7 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
     requestId: 'req-rag-deny-001',
     employeeId: 'emp-hashed-042',
     targetEntitlement: 'prod-postgres-admin',
+    justification: 'Need production admin to restart a failed migration job.',
     currentEntitlements: ['prod-postgres-read', 'staging-postgres-write'],
     recommendation: {
       decision: 'DENY',
@@ -37,6 +40,7 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
     requestId: 'req-rag-escalate-002',
     employeeId: 'emp-hashed-117',
     targetEntitlement: 'analytics-warehouse-writer',
+    justification: 'Quarterly reporting needs write access to the analytics warehouse.',
     currentEntitlements: ['analytics-warehouse-reader'],
     recommendation: {
       decision: 'ESCALATE',
@@ -88,12 +92,65 @@ function setMockPendingStore(requests: PendingAccessRequest[]): void {
   (globalThis as MockPendingGlobal)[MOCK_PENDING_STORE_KEY] = requests;
 }
 
+function buildMockRecommendation(
+  payload: CreateAccessRequestPayload,
+): PendingAccessRequest['recommendation'] {
+  const lowered = `${payload.targetEntitlement} ${payload.justification}`.toLowerCase();
+  let decision: RecommendationDecision = 'ESCALATE';
+  let confidenceScore = 0.42;
+  let rationale =
+    'Policy context is ambiguous for this entitlement and justification pairing. Escalate for human adjudication.';
+
+  if (lowered.includes('admin') || lowered.includes('prod-postgres')) {
+    decision = 'DENY';
+    confidenceScore = 0.88;
+    rationale =
+      'Privileged production access typically requires an approved change ticket. The submitted justification does not cite one, so the mock agent recommends DENY.';
+  } else if (lowered.includes('read') || lowered.includes('viewer')) {
+    decision = 'APPROVE';
+    confidenceScore = 0.81;
+    rationale =
+      'Read-scoped entitlements with a clear business justification are generally within policy for the mock agent.';
+  }
+
+  return {
+    decision,
+    confidenceScore,
+    rationale,
+    policyCitations: [
+      {
+        documentId: 'POL-2026-02',
+        pageNumber: 4,
+        sectionTitle: 'Privileged Access',
+        content:
+          'Production admin entitlements for cloud data stores require an approved change ticket before grant.',
+      },
+    ],
+  };
+}
+
 export function resetMockPendingAccessRequests(): void {
   setMockPendingStore(clonePendingRequests(MOCK_PENDING_ACCESS_REQUESTS));
 }
 
 export function getMockPendingAccessRequests(): PendingAccessRequest[] {
   return clonePendingRequests(getMockPendingStore());
+}
+
+export function createMockAccessRequest(payload: CreateAccessRequestPayload): PendingAccessRequest {
+  console.info('[HITL mock create]', payload);
+
+  const created: PendingAccessRequest = {
+    requestId: `req-mock-${Date.now()}`,
+    employeeId: 'E-MOCK-042',
+    targetEntitlement: payload.targetEntitlement,
+    justification: payload.justification,
+    currentEntitlements: ['prod-postgres-read'],
+    recommendation: buildMockRecommendation(payload),
+  };
+
+  setMockPendingStore([created, ...getMockPendingStore()]);
+  return clonePendingRequests([created])[0] as PendingAccessRequest;
 }
 
 export function applyMockDecision(

@@ -1,5 +1,6 @@
 import {
   applyMockDecision,
+  createMockAccessRequest,
   getMockPendingAccessRequests,
   MOCK_PENDING_ACCESS_REQUESTS,
   resetMockPendingAccessRequests,
@@ -22,7 +23,18 @@ describe('pending-access-requests mock store', () => {
     expect(getMockPendingAccessRequests()).toHaveLength(MOCK_PENDING_ACCESS_REQUESTS.length);
   });
 
-  it('removes a request on decision and logs the admin_id payload', () => {
+  it('creates a mock request with a heuristic recommendation and prepends it', () => {
+    const created = createMockAccessRequest({
+      targetEntitlement: 'prod-postgres-admin',
+      justification: 'Need admin for an incident',
+    });
+
+    expect(created.recommendation.decision).toBe('DENY');
+    expect(created.justification).toBe('Need admin for an incident');
+    expect(getMockPendingAccessRequests()[0]?.requestId).toBe(created.requestId);
+  });
+
+  it('removes a request on escalate and logs the admin_id payload', () => {
     const first = MOCK_PENDING_ACCESS_REQUESTS[0];
     if (first === undefined) {
       throw new Error('Expected at least one mock pending request');
@@ -33,17 +45,17 @@ describe('pending-access-requests mock store', () => {
       admin_id: 'admin-123',
     };
 
-    const result = applyMockDecision(payload, 'approved');
+    const result = applyMockDecision(payload, 'escalated');
 
     expect(result).toEqual({
       requestId: first.requestId,
-      status: 'approved',
+      status: 'escalated',
     });
     expect(getMockPendingAccessRequests().map((request) => request.requestId)).not.toContain(
       first.requestId,
     );
     expect(console.info).toHaveBeenCalledWith('[HITL mock decision]', payload, {
-      status: 'approved',
+      status: 'escalated',
     });
   });
 });
