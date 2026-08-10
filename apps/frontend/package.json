@@ -12,6 +12,7 @@
   "dependencies": {
     "@policy-pilot/shared-types": "*",
     "@tanstack/react-query": "^5.69.0",
+    "axios": "^1.19.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
