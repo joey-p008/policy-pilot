@@ -14,6 +14,21 @@ export const PolicyChunkInsertSchema = z.object({
 
 export type PolicyChunkInsert = z.infer<typeof PolicyChunkInsertSchema>;
 
+export const PolicyChunkSimilarityRowSchema = z.object({
+  id: z.string().uuid(),
+  documentId: z.string().min(1),
+  pageNumber: z.number().int().positive(),
+  sectionTitle: z.string().min(1),
+  content: z.string().min(1),
+});
+
+export type PolicyChunkSimilarityRow = z.infer<typeof PolicyChunkSimilarityRowSchema>;
+
+const SimilarityQuerySchema = z.object({
+  embedding: z.array(z.number()).length(1536),
+  limit: z.number().int().positive(),
+});
+
 @Injectable()
 export class PolicyChunkRepository {
   public constructor(private readonly prisma: PrismaService) {}
@@ -60,5 +75,35 @@ export class PolicyChunkRepository {
     });
 
     return validated.length;
+  }
+
+  public async findTopSimilar(
+    embedding: number[],
+    limit: number,
+  ): Promise<PolicyChunkSimilarityRow[]> {
+    const query = SimilarityQuerySchema.parse({ embedding, limit });
+    const embeddingLiteral = `[${query.embedding.join(',')}]`;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        documentId: string;
+        pageNumber: number;
+        sectionTitle: string;
+        content: string;
+      }>
+    >`
+      SELECT
+        id,
+        document_id AS "documentId",
+        page_number AS "pageNumber",
+        section_title AS "sectionTitle",
+        content
+      FROM policy_chunks
+      ORDER BY embedding <=> ${embeddingLiteral}::vector
+      LIMIT ${query.limit}
+    `;
+
+    return rows.map((row) => PolicyChunkSimilarityRowSchema.parse(row));
   }
 }

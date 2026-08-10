@@ -31,6 +31,11 @@ export {
   type EmbeddingClient,
 } from './embedding/embedding.types';
 export { OpenAiEmbeddingClient } from './embedding/openai-embedding.client';
+export {
+  ACCESS_DECISION_PROMPT_KEY,
+  loadAccessDecisionSystemPrompt,
+} from './prompts/access-decision.prompt';
+export { RETRIEVAL_TOP_K, RetrievalService } from './retrieval.service';
 
 export {
   PolicyCitationSchema,
