@@ -1,33 +1,139 @@
 import type { PendingAccessRequest, PolicyCitation } from '@policy-pilot/shared-types';
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 
 import { useApproveRequest, useDenyRequest, usePendingRequests } from '../hooks/useAccessRequests';
+import { ConfidenceGauge } from './ConfidenceGauge';
+import { DecisionBadge } from './DecisionBadge';
+import { PolicyCitationModal } from './PolicyCitationModal';
 
-const RATIONALE_PREVIEW_LENGTH = 120;
-
-function formatConfidence(score: number): string {
-  return `${Math.round(score * 100)}%`;
+function citationLabel(citation: PolicyCitation): string {
+  return `${citation.documentId} p.${citation.pageNumber} (${citation.sectionTitle})`;
 }
 
-function formatCitations(citations: PolicyCitation[]): string {
-  if (citations.length === 0) {
-    return 'None';
-  }
-
-  return citations
-    .map((citation) => `${citation.documentId} p.${citation.pageNumber} (${citation.sectionTitle})`)
-    .join('; ');
+function EntitlementsExpander({ request }: { request: PendingAccessRequest }): JSX.Element {
+  return (
+    <details className="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3">
+      <summary className="cursor-pointer text-sm font-medium text-slate-200">
+        Compare current entitlements vs requested permission
+      </summary>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Current entitlements
+          </h3>
+          {request.currentEntitlements.length > 0 ? (
+            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-200">
+              {request.currentEntitlements.map((entitlement) => (
+                <li key={entitlement}>{entitlement}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-400">None</p>
+          )}
+        </div>
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Requested permission
+          </h3>
+          <p className="text-sm font-medium text-teal-300">{request.targetEntitlement}</p>
+        </div>
+      </div>
+    </details>
+  );
 }
 
-function truncateRationale(rationale: string): string {
-  if (rationale.length <= RATIONALE_PREVIEW_LENGTH) {
-    return rationale;
-  }
+function RequestCard({
+  request,
+  actionsDisabled,
+  onApprove,
+  onDeny,
+  onOpenCitation,
+}: {
+  request: PendingAccessRequest;
+  actionsDisabled: boolean;
+  onApprove: (requestId: string) => void;
+  onDeny: (requestId: string) => void;
+  onOpenCitation: (citation: PolicyCitation) => void;
+}): JSX.Element {
+  return (
+    <article className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p className="font-mono text-xs text-slate-400">{request.requestId}</p>
+          <h2 className="text-lg font-semibold text-slate-100">{request.targetEntitlement}</h2>
+        </div>
+        <DecisionBadge decision={request.recommendation.decision} />
+      </div>
 
-  return `${rationale.slice(0, RATIONALE_PREVIEW_LENGTH)}…`;
+      <ConfidenceGauge score={request.recommendation.confidenceScore} />
+
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rationale</h3>
+        <p className="text-sm leading-relaxed text-slate-200">{request.recommendation.rationale}</p>
+      </div>
+
+      <EntitlementsExpander request={request} />
+
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Policy citations
+        </h3>
+        {request.recommendation.policyCitations.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {request.recommendation.policyCitations.map((citation) => (
+              <li key={`${citation.documentId}-${citation.pageNumber}-${citation.sectionTitle}`}>
+                <button
+                  type="button"
+                  className="text-left text-sm text-teal-300 underline decoration-teal-700 underline-offset-2 hover:text-teal-200"
+                  onClick={() => {
+                    onOpenCitation(citation);
+                  }}
+                >
+                  {citationLabel(citation)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-400">None</p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-4">
+        <button
+          type="button"
+          className="rounded bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={actionsDisabled}
+          onClick={() => {
+            onApprove(request.requestId);
+          }}
+        >
+          Approve
+        </button>
+        <button
+          type="button"
+          className="rounded bg-rose-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={actionsDisabled}
+          onClick={() => {
+            onDeny(request.requestId);
+          }}
+        >
+          Deny
+        </button>
+        <button
+          type="button"
+          className="rounded border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled
+          title="Manual Override is not available yet"
+        >
+          Manual Override
+        </button>
+      </div>
+    </article>
+  );
 }
 
-function PendingRequestsTable({
+function PendingRequestsList({
   requests,
   approvePending,
   denyPending,
@@ -40,87 +146,32 @@ function PendingRequestsTable({
   onApprove: (requestId: string) => void;
   onDeny: (requestId: string) => void;
 }): JSX.Element {
-  return (
-    <div className="overflow-x-auto rounded-lg border border-slate-800">
-      <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-        <thead className="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-400">
-          <tr>
-            <th className="px-4 py-3 font-medium">Request ID</th>
-            <th className="px-4 py-3 font-medium">Target entitlement</th>
-            <th className="px-4 py-3 font-medium">Current entitlements</th>
-            <th className="px-4 py-3 font-medium">AI decision</th>
-            <th className="px-4 py-3 font-medium">Confidence</th>
-            <th className="px-4 py-3 font-medium">Citations</th>
-            <th className="px-4 py-3 font-medium">Rationale</th>
-            <th className="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-800">
-          {requests.map((request) => {
-            const actionsDisabled = approvePending || denyPending;
+  const [activeCitation, setActiveCitation] = useState<PolicyCitation | null>(null);
+  const actionsDisabled = approvePending || denyPending;
 
-            return (
-              <tr key={request.requestId} className="align-top text-slate-200">
-                <td className="px-4 py-3 font-mono text-xs text-slate-300">{request.requestId}</td>
-                <td className="px-4 py-3">{request.targetEntitlement}</td>
-                <td className="px-4 py-3">
-                  {request.currentEntitlements.length > 0
-                    ? request.currentEntitlements.join(', ')
-                    : 'None'}
-                </td>
-                <td className="px-4 py-3 font-medium text-teal-300">
-                  {request.recommendation.decision}
-                </td>
-                <td className="px-4 py-3">
-                  {formatConfidence(request.recommendation.confidenceScore)}
-                </td>
-                <td className="px-4 py-3 text-slate-300">
-                  {formatCitations(request.recommendation.policyCitations)}
-                </td>
-                <td
-                  className="max-w-xs px-4 py-3 text-slate-300"
-                  title={request.recommendation.rationale}
-                >
-                  {truncateRationale(request.recommendation.rationale)}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="rounded bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={actionsDisabled}
-                      onClick={() => {
-                        onApprove(request.requestId);
-                      }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded bg-rose-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={actionsDisabled}
-                      onClick={() => {
-                        onDeny(request.requestId);
-                      }}
-                    >
-                      Deny
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled
-                      title="Manual Override is not available yet"
-                    >
-                      Manual Override
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+  return (
+    <>
+      <div className="space-y-4">
+        {requests.map((request) => (
+          <RequestCard
+            key={request.requestId}
+            request={request}
+            actionsDisabled={actionsDisabled}
+            onApprove={onApprove}
+            onDeny={onDeny}
+            onOpenCitation={setActiveCitation}
+          />
+        ))}
+      </div>
+      {activeCitation !== null ? (
+        <PolicyCitationModal
+          citation={activeCitation}
+          onClose={() => {
+            setActiveCitation(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -163,7 +214,7 @@ export function Dashboard(): JSX.Element {
     );
   } else {
     body = (
-      <PendingRequestsTable
+      <PendingRequestsList
         requests={data ?? []}
         approvePending={approve.isPending}
         denyPending={deny.isPending}
@@ -178,7 +229,7 @@ export function Dashboard(): JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <header className="space-y-2">
         <p className="text-sm font-medium uppercase tracking-[0.2em] text-teal-400">Policy-Pilot</p>
         <h1 className="text-3xl font-semibold tracking-tight">HITL Dashboard</h1>
