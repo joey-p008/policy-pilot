@@ -5,17 +5,28 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { PendingAccessRequest } from '@policy-pilot/shared-types';
 import type { JSX, ReactNode } from 'react';
 
-import { apiClient } from '../lib/apiClient';
+import {
+  ACCESS_REQUESTS_PENDING_QUERY_KEY,
+  approveAccessRequest,
+  denyAccessRequest,
+  fetchPendingAccessRequests,
+} from '../api/access-requests';
 import { useApproveRequest, useDenyRequest, usePendingRequests } from './useAccessRequests';
 
-jest.mock('../lib/apiClient', () => ({
-  apiClient: {
-    get: jest.fn(),
-    post: jest.fn(),
-  },
+jest.mock('../api/access-requests', () => ({
+  ACCESS_REQUESTS_PENDING_QUERY_KEY: ['access-requests', 'pending'],
+  fetchPendingAccessRequests: jest.fn(),
+  approveAccessRequest: jest.fn(),
+  denyAccessRequest: jest.fn(),
 }));
 
-const mockedApiClient = apiClient as jest.Mocked<Pick<typeof apiClient, 'get' | 'post'>>;
+const mockedFetchPendingAccessRequests = fetchPendingAccessRequests as jest.MockedFunction<
+  typeof fetchPendingAccessRequests
+>;
+const mockedApproveAccessRequest = approveAccessRequest as jest.MockedFunction<
+  typeof approveAccessRequest
+>;
+const mockedDenyAccessRequest = denyAccessRequest as jest.MockedFunction<typeof denyAccessRequest>;
 
 const pendingRequest: PendingAccessRequest = {
   requestId: 'req-1',
@@ -30,6 +41,7 @@ const pendingRequest: PendingAccessRequest = {
         documentId: 'POL-2026-02',
         pageNumber: 4,
         sectionTitle: 'Privileged Access',
+        content: 'Production admin requires an approved change ticket.',
       },
     ],
     confidenceScore: 0.91,
@@ -59,7 +71,7 @@ describe('useAccessRequests hooks', () => {
   });
 
   it('loads pending access requests', async () => {
-    mockedApiClient.get.mockResolvedValue({ data: [pendingRequest] });
+    mockedFetchPendingAccessRequests.mockResolvedValue([pendingRequest]);
 
     const { result } = renderHook(() => usePendingRequests(), {
       wrapper: createWrapper(),
@@ -69,16 +81,18 @@ describe('useAccessRequests hooks', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockedApiClient.get).toHaveBeenCalledWith('/access-requests/pending');
+    expect(mockedFetchPendingAccessRequests).toHaveBeenCalledTimes(1);
     expect(result.current.data).toEqual([pendingRequest]);
+    expect(ACCESS_REQUESTS_PENDING_QUERY_KEY).toEqual(['access-requests', 'pending']);
   });
 
   it('approves a request and invalidates the pending list', async () => {
-    mockedApiClient.get
-      .mockResolvedValueOnce({ data: [pendingRequest] })
-      .mockResolvedValueOnce({ data: [] });
-    mockedApiClient.post.mockResolvedValue({
-      data: { requestId: 'req-1', status: 'approved' },
+    mockedFetchPendingAccessRequests
+      .mockResolvedValueOnce([pendingRequest])
+      .mockResolvedValueOnce([]);
+    mockedApproveAccessRequest.mockResolvedValue({
+      requestId: 'req-1',
+      status: 'approved',
     });
 
     const { result } = renderHook(
@@ -100,16 +114,17 @@ describe('useAccessRequests hooks', () => {
       expect(result.current.pending.data).toEqual([]);
     });
 
-    expect(mockedApiClient.post).toHaveBeenCalledWith('/access-requests/req-1/approve');
-    expect(mockedApiClient.get).toHaveBeenCalledTimes(2);
+    expect(mockedApproveAccessRequest).toHaveBeenCalledWith('req-1', expect.anything());
+    expect(mockedFetchPendingAccessRequests).toHaveBeenCalledTimes(2);
   });
 
   it('denies a request and invalidates the pending list', async () => {
-    mockedApiClient.get
-      .mockResolvedValueOnce({ data: [pendingRequest] })
-      .mockResolvedValueOnce({ data: [] });
-    mockedApiClient.post.mockResolvedValue({
-      data: { requestId: 'req-1', status: 'denied' },
+    mockedFetchPendingAccessRequests
+      .mockResolvedValueOnce([pendingRequest])
+      .mockResolvedValueOnce([]);
+    mockedDenyAccessRequest.mockResolvedValue({
+      requestId: 'req-1',
+      status: 'denied',
     });
 
     const { result } = renderHook(
@@ -131,7 +146,7 @@ describe('useAccessRequests hooks', () => {
       expect(result.current.pending.data).toEqual([]);
     });
 
-    expect(mockedApiClient.post).toHaveBeenCalledWith('/access-requests/req-1/deny');
-    expect(mockedApiClient.get).toHaveBeenCalledTimes(2);
+    expect(mockedDenyAccessRequest).toHaveBeenCalledWith('req-1', expect.anything());
+    expect(mockedFetchPendingAccessRequests).toHaveBeenCalledTimes(2);
   });
 });

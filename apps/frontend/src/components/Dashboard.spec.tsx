@@ -1,10 +1,10 @@
 /** @jest-environment jsdom */
 
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
-import type { PendingAccessRequest } from '@policy-pilot/shared-types';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import { useApproveRequest, useDenyRequest, usePendingRequests } from '../hooks/useAccessRequests';
+import { MOCK_PENDING_ACCESS_REQUESTS } from '../mocks/pending-access-requests';
 import { Dashboard } from './Dashboard';
 
 jest.mock('../hooks/useAccessRequests', () => ({
@@ -19,24 +19,11 @@ const mockedUsePendingRequests = usePendingRequests as jest.MockedFunction<
 const mockedUseApproveRequest = useApproveRequest as jest.MockedFunction<typeof useApproveRequest>;
 const mockedUseDenyRequest = useDenyRequest as jest.MockedFunction<typeof useDenyRequest>;
 
-const pendingRequest: PendingAccessRequest = {
-  requestId: 'req-1',
-  employeeId: 'emp-hashed',
-  targetEntitlement: 'prod-postgres-admin',
-  currentEntitlements: ['prod-postgres-read'],
-  recommendation: {
-    decision: 'DENY',
-    rationale: 'Missing approved change ticket.',
-    policyCitations: [
-      {
-        documentId: 'POL-2026-02',
-        pageNumber: 4,
-        sectionTitle: 'Privileged Access',
-      },
-    ],
-    confidenceScore: 0.91,
-  },
-};
+const [denyRequest] = MOCK_PENDING_ACCESS_REQUESTS;
+
+if (denyRequest === undefined) {
+  throw new Error('Expected MOCK_PENDING_ACCESS_REQUESTS to include at least one fixture row');
+}
 
 function mockMutationIdle() {
   return {
@@ -82,12 +69,12 @@ describe('Dashboard', () => {
     render(<Dashboard />);
 
     expect(screen.getByRole('status')).toHaveTextContent('No pending access requests.');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
   });
 
-  it('renders mock pending request HITL fields', () => {
+  it('renders structured RAG recommendation UI from mock data', () => {
     mockedUsePendingRequests.mockReturnValue({
-      data: [pendingRequest],
+      data: [denyRequest],
       isPending: false,
       isError: false,
       isSuccess: true,
@@ -97,17 +84,67 @@ describe('Dashboard', () => {
 
     render(<Dashboard />);
 
-    expect(screen.getByRole('table')).toBeInTheDocument();
-    expect(screen.getByText('req-1')).toBeInTheDocument();
-    expect(screen.getByText('prod-postgres-admin')).toBeInTheDocument();
-    expect(screen.getByText('prod-postgres-read')).toBeInTheDocument();
-    expect(screen.getByText('DENY')).toBeInTheDocument();
-    expect(screen.getByText('91%')).toBeInTheDocument();
-    expect(screen.getByText('POL-2026-02 p.4 (Privileged Access)')).toBeInTheDocument();
-    expect(screen.getByText('Missing approved change ticket.')).toBeInTheDocument();
+    const card = screen.getByRole('article');
+    expect(within(card).getByText('DENY')).toBeInTheDocument();
+    expect(screen.getByLabelText('Confidence 91%')).toBeInTheDocument();
+    expect(screen.getByRole('meter', { name: 'Confidence score' })).toHaveAttribute(
+      'aria-valuenow',
+      '91',
+    );
+    expect(screen.getByText(denyRequest.recommendation.rationale)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Manual Override' })).toBeDisabled();
+  });
+
+  it('expands entitlements comparison for current vs requested', () => {
+    mockedUsePendingRequests.mockReturnValue({
+      data: [denyRequest],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof usePendingRequests>);
+
+    render(<Dashboard />);
+
+    fireEvent.click(screen.getByText('Compare current entitlements vs requested permission'));
+
+    expect(screen.getByText('Current entitlements')).toBeInTheDocument();
+    expect(screen.getByText('prod-postgres-read')).toBeInTheDocument();
+    expect(screen.getByText('staging-postgres-write')).toBeInTheDocument();
+    expect(screen.getByText('Requested permission')).toBeInTheDocument();
+    expect(screen.getAllByText('prod-postgres-admin').length).toBeGreaterThan(0);
+  });
+
+  it('opens a citation modal with policy chunk content', () => {
+    mockedUsePendingRequests.mockReturnValue({
+      data: [denyRequest],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof usePendingRequests>);
+
+    const firstCitation = denyRequest.recommendation.policyCitations[0];
+    if (firstCitation === undefined || firstCitation.content === undefined) {
+      throw new Error('Expected mock citation with content');
+    }
+
+    render(<Dashboard />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'POL-2026-02 p.4 (Privileged Access)',
+      }),
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText(/POL-2026-02 · p\.4 · Privileged Access/)).toBeInTheDocument();
+    expect(within(dialog).getByText(firstCitation.content)).toBeInTheDocument();
   });
 
   it('renders the error state with a retry control', () => {
