@@ -2,7 +2,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/apps', '<rootDir>/shared'],
+  roots: ['<rootDir>/apps', '<rootDir>/shared', '<rootDir>/evals'],
   testMatch: ['**/*.{spec,test}.{ts,tsx}'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
   moduleNameMapper: {
