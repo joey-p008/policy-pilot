@@ -1,9 +1,14 @@
-import type { AccessRequestDecisionResult, PendingAccessRequest } from '@policy-pilot/shared-types';
+import type {
+  AccessRequestDecisionPayload,
+  AccessRequestDecisionResult,
+  PendingAccessRequest,
+} from '@policy-pilot/shared-types';
 
 import { apiClient } from '../lib/apiClient';
-import { MOCK_PENDING_ACCESS_REQUESTS } from '../mocks/pending-access-requests';
+import { applyMockDecision, getMockPendingAccessRequests } from '../mocks/pending-access-requests';
 
 export const ACCESS_REQUESTS_PENDING_QUERY_KEY = ['access-requests', 'pending'] as const;
+export { MOCK_HITL_ADMIN_ID } from './hitl-constants';
 
 function shouldUseHitlMockData(): boolean {
   return import.meta.env.VITE_HITL_USE_MOCK_DATA === 'true';
@@ -11,7 +16,7 @@ function shouldUseHitlMockData(): boolean {
 
 export async function fetchPendingAccessRequests(): Promise<PendingAccessRequest[]> {
   if (shouldUseHitlMockData()) {
-    return MOCK_PENDING_ACCESS_REQUESTS;
+    return getMockPendingAccessRequests();
   }
 
   const response = await apiClient.get<PendingAccessRequest[]>('/access-requests/pending');
@@ -19,17 +24,29 @@ export async function fetchPendingAccessRequests(): Promise<PendingAccessRequest
 }
 
 export async function approveAccessRequest(
-  requestId: string,
+  payload: AccessRequestDecisionPayload,
 ): Promise<AccessRequestDecisionResult> {
+  if (shouldUseHitlMockData()) {
+    return applyMockDecision(payload, 'approved');
+  }
+
   const response = await apiClient.post<AccessRequestDecisionResult>(
-    `/access-requests/${requestId}/approve`,
+    `/access-requests/${payload.requestId}/approve`,
+    { admin_id: payload.admin_id },
   );
   return response.data;
 }
 
-export async function denyAccessRequest(requestId: string): Promise<AccessRequestDecisionResult> {
+export async function denyAccessRequest(
+  payload: AccessRequestDecisionPayload,
+): Promise<AccessRequestDecisionResult> {
+  if (shouldUseHitlMockData()) {
+    return applyMockDecision(payload, 'denied');
+  }
+
   const response = await apiClient.post<AccessRequestDecisionResult>(
-    `/access-requests/${requestId}/deny`,
+    `/access-requests/${payload.requestId}/deny`,
+    { admin_id: payload.admin_id },
   );
   return response.data;
 }

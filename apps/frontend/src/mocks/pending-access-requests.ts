@@ -1,4 +1,8 @@
-import type { PendingAccessRequest } from '@policy-pilot/shared-types';
+import type {
+  AccessRequestDecisionPayload,
+  AccessRequestDecisionResult,
+  PendingAccessRequest,
+} from '@policy-pilot/shared-types';
 
 export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
   {
@@ -58,3 +62,56 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
     },
   },
 ];
+
+const MOCK_PENDING_STORE_KEY = '__policyPilotMockPendingAccessRequests__' as const;
+
+type MockPendingGlobal = typeof globalThis & {
+  [MOCK_PENDING_STORE_KEY]?: PendingAccessRequest[];
+};
+
+function clonePendingRequests(requests: PendingAccessRequest[]): PendingAccessRequest[] {
+  return JSON.parse(JSON.stringify(requests)) as PendingAccessRequest[];
+}
+
+function getMockPendingStore(): PendingAccessRequest[] {
+  const globalRef = globalThis as MockPendingGlobal;
+  const existing = globalRef[MOCK_PENDING_STORE_KEY];
+  if (existing === undefined) {
+    const seeded = clonePendingRequests(MOCK_PENDING_ACCESS_REQUESTS);
+    globalRef[MOCK_PENDING_STORE_KEY] = seeded;
+    return seeded;
+  }
+  return existing;
+}
+
+function setMockPendingStore(requests: PendingAccessRequest[]): void {
+  (globalThis as MockPendingGlobal)[MOCK_PENDING_STORE_KEY] = requests;
+}
+
+export function resetMockPendingAccessRequests(): void {
+  setMockPendingStore(clonePendingRequests(MOCK_PENDING_ACCESS_REQUESTS));
+}
+
+export function getMockPendingAccessRequests(): PendingAccessRequest[] {
+  return clonePendingRequests(getMockPendingStore());
+}
+
+export function applyMockDecision(
+  payload: AccessRequestDecisionPayload,
+  status: AccessRequestDecisionResult['status'],
+): AccessRequestDecisionResult {
+  console.info('[HITL mock decision]', payload, { status });
+
+  const store = getMockPendingStore();
+  const exists = store.some((request) => request.requestId === payload.requestId);
+  if (!exists) {
+    throw new Error(`Mock pending access request not found: ${payload.requestId}`);
+  }
+
+  setMockPendingStore(store.filter((request) => request.requestId !== payload.requestId));
+
+  return {
+    requestId: payload.requestId,
+    status,
+  };
+}

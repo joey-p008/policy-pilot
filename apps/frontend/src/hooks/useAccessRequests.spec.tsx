@@ -11,6 +11,7 @@ import {
   denyAccessRequest,
   fetchPendingAccessRequests,
 } from '../api/access-requests';
+import { MOCK_HITL_ADMIN_ID } from '../api/hitl-constants';
 import { useApproveRequest, useDenyRequest, usePendingRequests } from './useAccessRequests';
 
 jest.mock('../api/access-requests', () => ({
@@ -46,6 +47,11 @@ const pendingRequest: PendingAccessRequest = {
     ],
     confidenceScore: 0.91,
   },
+};
+
+const decisionPayload = {
+  requestId: 'req-1',
+  admin_id: MOCK_HITL_ADMIN_ID,
 };
 
 function createWrapper() {
@@ -107,14 +113,14 @@ describe('useAccessRequests hooks', () => {
       expect(result.current.pending.isSuccess).toBe(true);
     });
 
-    result.current.approve.mutate('req-1');
+    result.current.approve.mutate(decisionPayload);
 
     await waitFor(() => {
       expect(result.current.approve.isSuccess).toBe(true);
       expect(result.current.pending.data).toEqual([]);
     });
 
-    expect(mockedApproveAccessRequest).toHaveBeenCalledWith('req-1', expect.anything());
+    expect(mockedApproveAccessRequest).toHaveBeenCalledWith(decisionPayload, expect.anything());
     expect(mockedFetchPendingAccessRequests).toHaveBeenCalledTimes(2);
   });
 
@@ -139,14 +145,77 @@ describe('useAccessRequests hooks', () => {
       expect(result.current.pending.isSuccess).toBe(true);
     });
 
-    result.current.deny.mutate('req-1');
+    result.current.deny.mutate(decisionPayload);
 
     await waitFor(() => {
       expect(result.current.deny.isSuccess).toBe(true);
       expect(result.current.pending.data).toEqual([]);
     });
 
-    expect(mockedDenyAccessRequest).toHaveBeenCalledWith('req-1', expect.anything());
+    expect(mockedDenyAccessRequest).toHaveBeenCalledWith(decisionPayload, expect.anything());
     expect(mockedFetchPendingAccessRequests).toHaveBeenCalledTimes(2);
+  });
+
+  it('optimistically removes a pending request before refetch settles', async () => {
+    mockedFetchPendingAccessRequests
+      .mockResolvedValueOnce([pendingRequest])
+      .mockResolvedValueOnce([]);
+    mockedApproveAccessRequest.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              requestId: 'req-1',
+              status: 'approved',
+            });
+          }, 50);
+        }),
+    );
+
+    const { result } = renderHook(
+      () => ({
+        pending: usePendingRequests(),
+        approve: useApproveRequest(),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.pending.isSuccess).toBe(true);
+    });
+
+    result.current.approve.mutate(decisionPayload);
+
+    await waitFor(() => {
+      expect(result.current.pending.data).toEqual([]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.approve.isSuccess).toBe(true);
+    });
+  });
+
+  it('rolls back the pending list when approve fails', async () => {
+    mockedFetchPendingAccessRequests.mockResolvedValue([pendingRequest]);
+    mockedApproveAccessRequest.mockRejectedValue(new Error('approve failed'));
+
+    const { result } = renderHook(
+      () => ({
+        pending: usePendingRequests(),
+        approve: useApproveRequest(),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.pending.isSuccess).toBe(true);
+    });
+
+    result.current.approve.mutate(decisionPayload);
+
+    await waitFor(() => {
+      expect(result.current.approve.isError).toBe(true);
+      expect(result.current.pending.data).toEqual([pendingRequest]);
+    });
   });
 });
