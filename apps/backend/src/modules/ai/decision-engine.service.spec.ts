@@ -104,6 +104,38 @@ describe('DecisionEngineService', () => {
     expect(assembledPrompt).toContain('Finance Analytics');
   });
 
+  it('forces ESCALATE when APPROVE citations cannot be grounded in retrieved chunks', async () => {
+    mockChatClient.complete.mockResolvedValue({
+      content: JSON.stringify({
+        decision: 'APPROVE',
+        rationale: 'Baseline match claimed without retrieved support.',
+        policy_citations: [
+          {
+            document_id: 'POL-9999-99-ZZZ',
+            page_number: 1,
+            section_title: 'Invented Section',
+          },
+        ],
+        confidence_score: 0.99,
+      }),
+      inputTokens: 120,
+      outputTokens: 80,
+    });
+
+    const decision = await service.decide({
+      request: {
+        requestId: 'req-ungrounded',
+        targetEntitlement: 'prod-postgres-admin',
+        justification: 'Need admin for deploy',
+      },
+      policyChunks,
+    });
+
+    expect(decision.decision).toBe('ESCALATE');
+    expect(decision.policy_citations).toEqual([]);
+    expect(decision.confidence_score).toBeLessThanOrEqual(0.39);
+  });
+
   it('throws InternalServerErrorException when LLM returns unformatted text', async () => {
     mockChatClient.complete.mockResolvedValue({
       content: 'I think we should approve this.',
