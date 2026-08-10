@@ -15,6 +15,10 @@ const retrievalRequestSchema = z.object({
   requestId: z.string().min(1),
   targetEntitlement: z.string().min(1),
   justification: z.string().min(1).optional(),
+  costCenter: z.string().min(1).optional(),
+  department: z.string().min(1).optional(),
+  targetResource: z.string().min(1).optional(),
+  currentEntitlements: z.array(z.string()).optional(),
 });
 
 export type RetrievalRequest = z.infer<typeof retrievalRequestSchema>;
@@ -28,10 +32,7 @@ export class RetrievalService {
 
   public async retrieve(request: RetrievalRequest): Promise<PolicyDocumentChunk[]> {
     const validatedRequest = retrievalRequestSchema.parse(request);
-    const queryText = this.buildQueryText(
-      validatedRequest.targetEntitlement,
-      validatedRequest.justification,
-    );
+    const queryText = this.buildQueryText(validatedRequest);
     const embeddings = await this.embeddingClient.embedTexts([queryText]);
     const embedding = embeddings[0];
 
@@ -49,11 +50,26 @@ export class RetrievalService {
     return rows.map((row) => this.toPolicyDocumentChunk(row));
   }
 
-  private buildQueryText(targetEntitlement: string, justification?: string): string {
-    if (justification === undefined || justification.trim().length === 0) {
-      return `Access entitlement request: ${targetEntitlement}`;
+  private buildQueryText(request: RetrievalRequest): string {
+    const parts: string[] = [`Access entitlement request: ${request.targetEntitlement}`];
+
+    if (request.department !== undefined && request.department.trim().length > 0) {
+      parts.push(`Department: ${request.department.trim()}`);
     }
-    return `Access entitlement request: ${targetEntitlement}. Business justification: ${justification}`;
+    if (request.costCenter !== undefined && request.costCenter.trim().length > 0) {
+      parts.push(`Cost center: ${request.costCenter.trim()}`);
+    }
+    if (request.targetResource !== undefined && request.targetResource.trim().length > 0) {
+      parts.push(`Target resource: ${request.targetResource.trim()}`);
+    }
+    if (request.currentEntitlements !== undefined && request.currentEntitlements.length > 0) {
+      parts.push(`Current entitlements: ${request.currentEntitlements.join(', ')}`);
+    }
+    if (request.justification !== undefined && request.justification.trim().length > 0) {
+      parts.push(`Business justification: ${request.justification.trim()}`);
+    }
+
+    return parts.join('. ');
   }
 
   private toPolicyDocumentChunk(row: PolicyChunkSimilarityRow): PolicyDocumentChunk {

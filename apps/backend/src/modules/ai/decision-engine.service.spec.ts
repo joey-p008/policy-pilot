@@ -67,6 +67,41 @@ describe('DecisionEngineService', () => {
     expect(assembledPrompt).toContain('prod-postgres-admin');
     expect(assembledPrompt).toContain('Emergency production incident response');
     expect(assembledPrompt).not.toContain('employeeId');
+    expect(mockChatClient.complete.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        schemaName: 'access_decision',
+        jsonSchema: expect.objectContaining({
+          type: 'object',
+          required: ['decision', 'rationale', 'policy_citations', 'confidence_score'],
+        }),
+      }),
+    );
+  });
+
+  it('includes structured access-request context in the LLM payload', async () => {
+    mockChatClient.complete.mockResolvedValue({
+      content: JSON.stringify(validDecision),
+      inputTokens: 120,
+      outputTokens: 80,
+    });
+
+    await service.decide({
+      request: {
+        requestId: 'req-42',
+        targetEntitlement: 'FIN_BILLING_EXPORT',
+        justification: 'Need billing export for close',
+        department: 'Finance Analytics',
+        costCenter: 'CC-FIN-07',
+        targetResource: 'DATA_WAREHOUSE / FIN_DATASET',
+        currentEntitlements: ['FIN_DATASET_EDIT'],
+      },
+      policyChunks,
+    });
+
+    const assembledPrompt = mockChatClient.complete.mock.calls[0]?.[0] ?? '';
+    expect(assembledPrompt).toContain('CC-FIN-07');
+    expect(assembledPrompt).toContain('FIN_DATASET_EDIT');
+    expect(assembledPrompt).toContain('Finance Analytics');
   });
 
   it('throws InternalServerErrorException when LLM returns unformatted text', async () => {

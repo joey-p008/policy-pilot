@@ -113,12 +113,14 @@ describe('HitlAccessRequestsService', () => {
       expect.objectContaining({
         targetEntitlement: 'prod-postgres-admin',
         justification: 'Need admin for incident response',
+        currentEntitlements: ['payroll-api:read'],
       }),
     );
     expect(mockDecisionEngineService.decide).toHaveBeenCalledWith(
       expect.objectContaining({
         request: expect.objectContaining({
           justification: 'Need admin for incident response',
+          currentEntitlements: ['payroll-api:read'],
         }),
       }),
     );

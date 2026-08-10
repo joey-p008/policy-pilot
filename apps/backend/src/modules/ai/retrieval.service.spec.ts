@@ -93,4 +93,24 @@ describe('RetrievalService', () => {
       'Access entitlement request: analytics-warehouse-writer. Business justification: Need write access for quarterly reporting',
     ]);
   });
+
+  it('includes structured context fields in the embedding query', async () => {
+    const queryEmbedding = buildMockEmbedding(9);
+    mockEmbeddingClient.embedTexts.mockResolvedValue([queryEmbedding]);
+    mockPolicyChunkRepository.findTopSimilar.mockResolvedValue([]);
+
+    await service.retrieve({
+      requestId: 'req-789',
+      targetEntitlement: 'FIN_BILLING_EXPORT',
+      department: 'Finance Analytics',
+      costCenter: 'CC-FIN-07',
+      targetResource: 'DATA_WAREHOUSE / FIN_DATASET',
+      currentEntitlements: ['FIN_DATASET_EDIT'],
+      justification: 'Requester needs bulk billing export',
+    });
+
+    expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledWith([
+      'Access entitlement request: FIN_BILLING_EXPORT. Department: Finance Analytics. Cost center: CC-FIN-07. Target resource: DATA_WAREHOUSE / FIN_DATASET. Current entitlements: FIN_DATASET_EDIT. Business justification: Requester needs bulk billing export',
+    ]);
+  });
 });

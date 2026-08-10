@@ -46,7 +46,7 @@ describe('executeWithObservability', () => {
 
     expect(result.data).toEqual(validRecommendation);
     expect(result.observation.promptName).toBe('system-policy');
-    expect(result.observation.promptVersion).toBe('1.1.0');
+    expect(result.observation.promptVersion).toBe('1.2.0');
     expect(result.observation.schemaValid).toBe(true);
     expect(result.observation.schemaErrors).toEqual([]);
     expect(result.observation.latencyMs).toBeGreaterThanOrEqual(0);
