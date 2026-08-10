@@ -18,3 +18,7 @@ export const RecommendationSchema = z.object({
 export type PolicyCitation = z.infer<typeof PolicyCitationSchema>;
 export type RecommendationDecision = z.infer<typeof RecommendationDecisionSchema>;
 export type Recommendation = z.infer<typeof RecommendationSchema>;
+
+/** Structured decision-engine output; identical to RecommendationSchema. */
+export const DecisionSchema = RecommendationSchema;
+export type Decision = Recommendation;
