@@ -1,5 +1,8 @@
 import axios, { type AxiosInstance } from 'axios';
 
+import { DEMO_ACTOR_ID_HEADER, DEMO_ROLE_HEADER } from '../api/hitl-constants';
+import { getDemoIdentity } from './demo-identity';
+
 const DEFAULT_API_BASE_URL = 'http://localhost:3000';
 
 function resolveApiBaseUrl(): string {
@@ -17,4 +20,11 @@ export const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const identity = getDemoIdentity();
+  config.headers.set(DEMO_ROLE_HEADER, identity.role);
+  config.headers.set(DEMO_ACTOR_ID_HEADER, identity.actorId);
+  return config;
 });

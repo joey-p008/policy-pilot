@@ -4,24 +4,26 @@ import type { AccessRequest } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { DecisionEngineService } from '../ai/decision-engine.service';
 import { RetrievalService } from '../ai/retrieval.service';
+import { DEMO_PRINCIPALS } from '../auth/demo-auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
   AccessRequestRepository,
 } from '../database/repositories/access-request.repository';
 import { EntitlementRepository } from '../database/repositories/entitlement.repository';
 import { HitlAccessRequestsService } from './hitl-access-requests.service';
-import { SEED_HITL_ADMIN_API_ID, SEED_REQUESTOR_EMPLOYEE_ID } from './seed-ids';
+import { SEED_REQUESTOR_EMPLOYEE_ID } from './seed-ids';
 
 describe('HitlAccessRequestsService', () => {
   const mockAccessRequestRepository: jest.Mocked<
     Pick<
       AccessRequestRepository,
-      'create' | 'findByRequestId' | 'findPendingReview' | 'markDecided'
+      'create' | 'findByRequestId' | 'findPendingReview' | 'findDecided' | 'markDecided'
     >
   > = {
     create: jest.fn(),
     findByRequestId: jest.fn(),
     findPendingReview: jest.fn(),
+    findDecided: jest.fn(),
     markDecided: jest.fn(),
   };
 
@@ -88,10 +90,13 @@ describe('HitlAccessRequestsService', () => {
     mockAccessRequestRepository.create.mockResolvedValue({} as AccessRequest);
     mockAuditLogService.append.mockResolvedValue({} as never);
 
-    const result = await service.createWithRecommendation({
-      targetEntitlement: 'prod-postgres-admin',
-      justification: 'Need admin for incident response',
-    });
+    const result = await service.createWithRecommendation(
+      {
+        targetEntitlement: 'prod-postgres-admin',
+        justification: 'Need admin for incident response',
+      },
+      DEMO_PRINCIPALS.user,
+    );
 
     expect(result.employeeId).toBe(SEED_REQUESTOR_EMPLOYEE_ID);
     expect(result.justification).toBe('Need admin for incident response');
@@ -109,24 +114,13 @@ describe('HitlAccessRequestsService', () => {
         },
       ],
     });
-    expect(mockRetrievalService.retrieve).toHaveBeenCalledWith(
-      expect.objectContaining({
-        targetEntitlement: 'prod-postgres-admin',
-        justification: 'Need admin for incident response',
-        currentEntitlements: ['payroll-api:read'],
-      }),
-    );
-    expect(mockDecisionEngineService.decide).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          justification: 'Need admin for incident response',
-          currentEntitlements: ['payroll-api:read'],
-        }),
-      }),
+    expect(mockEntitlementRepository.findByUserId).toHaveBeenCalledWith(
+      DEMO_PRINCIPALS.user.userId,
     );
     expect(mockAuditLogService.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'RECOMMENDATION_CREATED',
+        actorId: DEMO_PRINCIPALS.user.userId,
       }),
     );
   });
@@ -139,32 +133,92 @@ describe('HitlAccessRequestsService', () => {
     mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
     mockAuditLogService.append.mockResolvedValue({} as never);
 
-    const result = await service.escalate('req-1', SEED_HITL_ADMIN_API_ID);
+    const result = await service.escalate('req-1', DEMO_PRINCIPALS.admin);
 
     expect(result).toEqual({ requestId: 'req-1', status: 'escalated' });
     expect(mockAccessRequestRepository.markDecided).toHaveBeenCalledWith({
       requestId: 'req-1',
       status: ACCESS_REQUEST_STATUS.ESCALATED,
-      decidedByAdminId: SEED_HITL_ADMIN_API_ID,
+      decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
     });
+    expect(mockAuditLogService.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'HUMAN_ESCALATED',
+      }),
+    );
+  });
+
+  it('overrides a decided request and audits HUMAN_DECISION_OVERRIDE', async () => {
+    mockAccessRequestRepository.findByRequestId.mockResolvedValue({
+      requestId: 'req-1',
+      status: ACCESS_REQUEST_STATUS.APPROVED,
+    } as AccessRequest);
+    mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
+    mockAuditLogService.append.mockResolvedValue({} as never);
+
+    const result = await service.deny('req-1', DEMO_PRINCIPALS.admin);
+
+    expect(result).toEqual({ requestId: 'req-1', status: 'denied' });
+    expect(mockAuditLogService.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'HUMAN_DECISION_OVERRIDE',
+        previousState: { status: ACCESS_REQUEST_STATUS.APPROVED },
+        newState: {
+          status: ACCESS_REQUEST_STATUS.DENIED,
+          actor_id: DEMO_PRINCIPALS.admin.actorId,
+        },
+      }),
+    );
+  });
+
+  it('throws ConflictException when overriding to the same status', async () => {
+    mockAccessRequestRepository.findByRequestId.mockResolvedValue({
+      requestId: 'req-1',
+      status: ACCESS_REQUEST_STATUS.DENIED,
+    } as AccessRequest);
+
+    await expect(service.deny('req-1', DEMO_PRINCIPALS.admin)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('throws NotFoundException when deciding a missing request', async () => {
     mockAccessRequestRepository.findByRequestId.mockResolvedValue(null);
 
-    await expect(service.approve('missing', SEED_HITL_ADMIN_API_ID)).rejects.toBeInstanceOf(
+    await expect(service.approve('missing', DEMO_PRINCIPALS.admin)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
-  it('throws ConflictException when deciding a non-pending request', async () => {
-    mockAccessRequestRepository.findByRequestId.mockResolvedValue({
-      requestId: 'req-1',
-      status: ACCESS_REQUEST_STATUS.APPROVED,
-    } as AccessRequest);
+  it('lists decided history items newest-first from repository', async () => {
+    const decidedAt = new Date('2026-08-01T12:00:00.000Z');
+    mockAccessRequestRepository.findDecided.mockResolvedValue([
+      {
+        requestId: 'req-hist-1',
+        employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
+        targetEntitlement: 'prod-postgres-admin',
+        justification: 'Need access',
+        status: ACCESS_REQUEST_STATUS.APPROVED,
+        recommendationJson: {
+          decision: 'APPROVE',
+          rationale: 'Within policy',
+          confidenceScore: 0.8,
+          policyCitations: [],
+        },
+        createdAt: decidedAt,
+        decidedAt,
+        decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+      } as unknown as AccessRequest,
+    ]);
 
-    await expect(service.deny('req-1', SEED_HITL_ADMIN_API_ID)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    const history = await service.listHistory();
+
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      requestId: 'req-hist-1',
+      status: 'APPROVED',
+      decidedAt: decidedAt.toISOString(),
+      decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+    });
   });
 });

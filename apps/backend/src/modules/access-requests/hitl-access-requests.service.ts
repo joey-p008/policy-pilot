@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   AccessRecommendation,
   AccessRequestDecisionResult,
+  AccessRequestHistoryItem,
+  AccessRequestHistoryStatus,
   PendingAccessRequest,
   PolicyCitation,
 } from '@policy-pilot/shared-types';
@@ -18,6 +15,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { DecisionEngineService } from '../ai/decision-engine.service';
 import { RetrievalService } from '../ai/retrieval.service';
 import type { Decision } from '../ai/schemas/recommendation.schema';
+import type { DemoPrincipal } from '../auth/demo-auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
   AccessRequestRepository,
@@ -25,12 +23,7 @@ import {
 } from '../database/repositories/access-request.repository';
 import { EntitlementRepository } from '../database/repositories/entitlement.repository';
 import type { CreateHitlAccessRequestDto } from './dto/hitl-access-requests.dto';
-import {
-  SEED_HITL_ADMIN_API_ID,
-  SEED_HITL_ADMIN_USER_ID,
-  SEED_REQUESTOR_EMPLOYEE_ID,
-  SEED_REQUESTOR_USER_ID,
-} from './seed-ids';
+import { SEED_REQUESTOR_USER_ID } from './seed-ids';
 
 function mapDecisionToRecommendation(
   decision: Decision,
@@ -94,6 +87,32 @@ function parseStoredRecommendation(value: Prisma.JsonValue): AccessRecommendatio
   };
 }
 
+function toHistoryStatus(status: string): AccessRequestHistoryStatus {
+  if (status === ACCESS_REQUEST_STATUS.APPROVED) {
+    return 'APPROVED';
+  }
+  if (status === ACCESS_REQUEST_STATUS.DENIED) {
+    return 'DENIED';
+  }
+  if (status === ACCESS_REQUEST_STATUS.ESCALATED) {
+    return 'ESCALATED';
+  }
+  throw new Error(`Unexpected decided status: ${status}`);
+}
+
+function toResultStatus(status: AccessRequestStatus): AccessRequestDecisionResult['status'] {
+  if (status === ACCESS_REQUEST_STATUS.APPROVED) {
+    return 'approved';
+  }
+  if (status === ACCESS_REQUEST_STATUS.DENIED) {
+    return 'denied';
+  }
+  if (status === ACCESS_REQUEST_STATUS.ESCALATED) {
+    return 'escalated';
+  }
+  throw new Error(`Unexpected decision status: ${status}`);
+}
+
 @Injectable()
 export class HitlAccessRequestsService {
   public constructor(
@@ -106,11 +125,12 @@ export class HitlAccessRequestsService {
 
   public async createWithRecommendation(
     dto: CreateHitlAccessRequestDto,
+    principal: DemoPrincipal,
   ): Promise<PendingAccessRequest> {
     const requestId = randomUUID();
-    const employeeId = SEED_REQUESTOR_EMPLOYEE_ID;
+    const employeeId = principal.employeeId;
 
-    const entitlements = await this.entitlementRepository.findByUserId(SEED_REQUESTOR_USER_ID);
+    const entitlements = await this.entitlementRepository.findByUserId(principal.userId);
     const currentEntitlements = entitlements.map(
       (entitlement) => `${entitlement.resourceName}:${entitlement.permissionLevel}`,
     );
@@ -145,7 +165,7 @@ export class HitlAccessRequestsService {
 
     await this.auditLogService.append({
       requestId,
-      actorId: SEED_HITL_ADMIN_USER_ID,
+      actorId: principal.userId,
       action: 'RECOMMENDATION_CREATED',
       previousState: { status: null },
       newState: {
@@ -183,71 +203,91 @@ export class HitlAccessRequestsService {
     }));
   }
 
-  public async approve(requestId: string, adminId: string): Promise<AccessRequestDecisionResult> {
-    return this.decide(
-      requestId,
-      adminId,
-      ACCESS_REQUEST_STATUS.APPROVED,
-      'approved',
-      'HUMAN_APPROVED',
+  public async listHistory(): Promise<AccessRequestHistoryItem[]> {
+    const rows = await this.accessRequestRepository.findDecided();
+    const entitlements = await this.entitlementRepository.findByUserId(SEED_REQUESTOR_USER_ID);
+    const currentEntitlements = entitlements.map(
+      (entitlement) => `${entitlement.resourceName}:${entitlement.permissionLevel}`,
     );
+
+    return rows.map((row) => ({
+      requestId: row.requestId,
+      employeeId: row.employeeId,
+      targetEntitlement: row.targetEntitlement,
+      justification: row.justification,
+      currentEntitlements,
+      recommendation: parseStoredRecommendation(row.recommendationJson),
+      status: toHistoryStatus(row.status),
+      decidedAt: (row.decidedAt ?? row.createdAt).toISOString(),
+      decidedByAdminId: row.decidedByAdminId,
+    }));
   }
 
-  public async deny(requestId: string, adminId: string): Promise<AccessRequestDecisionResult> {
-    return this.decide(requestId, adminId, ACCESS_REQUEST_STATUS.DENIED, 'denied', 'HUMAN_DENIED');
+  public async approve(
+    requestId: string,
+    principal: DemoPrincipal,
+  ): Promise<AccessRequestDecisionResult> {
+    return this.decide(requestId, principal, ACCESS_REQUEST_STATUS.APPROVED, 'HUMAN_APPROVED');
   }
 
-  public async escalate(requestId: string, adminId: string): Promise<AccessRequestDecisionResult> {
-    return this.decide(
-      requestId,
-      adminId,
-      ACCESS_REQUEST_STATUS.ESCALATED,
-      'escalated',
-      'HUMAN_ESCALATED',
-    );
+  public async deny(
+    requestId: string,
+    principal: DemoPrincipal,
+  ): Promise<AccessRequestDecisionResult> {
+    return this.decide(requestId, principal, ACCESS_REQUEST_STATUS.DENIED, 'HUMAN_DENIED');
+  }
+
+  public async escalate(
+    requestId: string,
+    principal: DemoPrincipal,
+  ): Promise<AccessRequestDecisionResult> {
+    return this.decide(requestId, principal, ACCESS_REQUEST_STATUS.ESCALATED, 'HUMAN_ESCALATED');
   }
 
   private async decide(
     requestId: string,
-    adminId: string,
+    principal: DemoPrincipal,
     status: AccessRequestStatus,
-    resultStatus: AccessRequestDecisionResult['status'],
-    auditAction: string,
+    firstDecisionAuditAction: string,
   ): Promise<AccessRequestDecisionResult> {
     const existing = await this.accessRequestRepository.findByRequestId(requestId);
     if (existing === null) {
       throw new NotFoundException(`Access request not found: ${requestId}`);
     }
-    if (existing.status !== ACCESS_REQUEST_STATUS.PENDING_REVIEW) {
-      throw new ConflictException(`Access request is not pending review: ${requestId}`);
+
+    const isPending = existing.status === ACCESS_REQUEST_STATUS.PENDING_REVIEW;
+    const isDecided =
+      existing.status === ACCESS_REQUEST_STATUS.APPROVED ||
+      existing.status === ACCESS_REQUEST_STATUS.DENIED ||
+      existing.status === ACCESS_REQUEST_STATUS.ESCALATED;
+
+    if (!isPending && !isDecided) {
+      throw new ConflictException(`Access request cannot be decided: ${requestId}`);
     }
 
-    const actorId = this.resolveAdminActorId(adminId);
+    if (existing.status === status) {
+      throw new ConflictException(`Access request already has status ${status}: ${requestId}`);
+    }
+
+    const auditAction = isPending ? firstDecisionAuditAction : 'HUMAN_DECISION_OVERRIDE';
 
     await this.accessRequestRepository.markDecided({
       requestId,
       status,
-      decidedByAdminId: adminId,
+      decidedByAdminId: principal.actorId,
     });
 
     await this.auditLogService.append({
       requestId,
-      actorId,
+      actorId: principal.userId,
       action: auditAction,
       previousState: { status: existing.status },
-      newState: { status, admin_id: adminId },
+      newState: { status, actor_id: principal.actorId },
     });
 
     return {
       requestId,
-      status: resultStatus,
+      status: toResultStatus(status),
     };
-  }
-
-  private resolveAdminActorId(adminId: string): string {
-    if (adminId === SEED_HITL_ADMIN_API_ID) {
-      return SEED_HITL_ADMIN_USER_ID;
-    }
-    throw new BadRequestException(`Unknown admin_id: ${adminId}`);
   }
 }

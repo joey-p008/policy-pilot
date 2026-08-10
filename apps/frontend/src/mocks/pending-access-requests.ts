@@ -1,10 +1,13 @@
 import type {
   AccessRequestDecisionPayload,
   AccessRequestDecisionResult,
+  AccessRequestHistoryItem,
   CreateAccessRequestPayload,
   PendingAccessRequest,
   RecommendationDecision,
 } from '@policy-pilot/shared-types';
+
+import { getDemoIdentity } from '../lib/demo-identity';
 
 export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
   {
@@ -67,14 +70,46 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
   },
 ];
 
+export const MOCK_HISTORY_ACCESS_REQUESTS: AccessRequestHistoryItem[] = [
+  {
+    requestId: 'req-hist-approved-001',
+    employeeId: 'E-MOCK-042',
+    targetEntitlement: 'analytics-dashboard-reader',
+    justification: 'Need read access for Q2 dashboard reviews.',
+    currentEntitlements: ['prod-postgres-read'],
+    recommendation: {
+      decision: 'APPROVE',
+      rationale: 'Read-scoped dashboard access is within policy for the requestor role.',
+      confidenceScore: 0.86,
+      policyCitations: [
+        {
+          documentId: 'POL-2026-01',
+          pageNumber: 3,
+          sectionTitle: 'Data Access Tiers',
+          content: 'Read-only access is the default for new joiners.',
+        },
+      ],
+    },
+    status: 'APPROVED',
+    decidedAt: '2026-07-15T14:30:00.000Z',
+    decidedByAdminId: 'admin-123',
+  },
+];
+
 const MOCK_PENDING_STORE_KEY = '__policyPilotMockPendingAccessRequests__' as const;
+const MOCK_HISTORY_STORE_KEY = '__policyPilotMockHistoryAccessRequests__' as const;
 
 type MockPendingGlobal = typeof globalThis & {
   [MOCK_PENDING_STORE_KEY]?: PendingAccessRequest[];
+  [MOCK_HISTORY_STORE_KEY]?: AccessRequestHistoryItem[];
 };
 
 function clonePendingRequests(requests: PendingAccessRequest[]): PendingAccessRequest[] {
   return JSON.parse(JSON.stringify(requests)) as PendingAccessRequest[];
+}
+
+function cloneHistoryRequests(requests: AccessRequestHistoryItem[]): AccessRequestHistoryItem[] {
+  return JSON.parse(JSON.stringify(requests)) as AccessRequestHistoryItem[];
 }
 
 function getMockPendingStore(): PendingAccessRequest[] {
@@ -90,6 +125,28 @@ function getMockPendingStore(): PendingAccessRequest[] {
 
 function setMockPendingStore(requests: PendingAccessRequest[]): void {
   (globalThis as MockPendingGlobal)[MOCK_PENDING_STORE_KEY] = requests;
+}
+
+function getMockHistoryStore(): AccessRequestHistoryItem[] {
+  const globalRef = globalThis as MockPendingGlobal;
+  const existing = globalRef[MOCK_HISTORY_STORE_KEY];
+  if (existing === undefined) {
+    const seeded = cloneHistoryRequests(MOCK_HISTORY_ACCESS_REQUESTS);
+    globalRef[MOCK_HISTORY_STORE_KEY] = seeded;
+    return seeded;
+  }
+  return existing;
+}
+
+function setMockHistoryStore(requests: AccessRequestHistoryItem[]): void {
+  (globalThis as MockPendingGlobal)[MOCK_HISTORY_STORE_KEY] = requests;
+}
+
+function assertAdminRole(): void {
+  const identity = getDemoIdentity();
+  if (identity.role !== 'admin') {
+    throw new Error('Mock RBAC denied: admin role required for this action');
+  }
 }
 
 function buildMockRecommendation(
@@ -129,20 +186,40 @@ function buildMockRecommendation(
   };
 }
 
+function toHistoryStatus(
+  status: AccessRequestDecisionResult['status'],
+): AccessRequestHistoryItem['status'] {
+  if (status === 'approved') {
+    return 'APPROVED';
+  }
+  if (status === 'denied') {
+    return 'DENIED';
+  }
+  return 'ESCALATED';
+}
+
 export function resetMockPendingAccessRequests(): void {
   setMockPendingStore(clonePendingRequests(MOCK_PENDING_ACCESS_REQUESTS));
+  setMockHistoryStore(cloneHistoryRequests(MOCK_HISTORY_ACCESS_REQUESTS));
 }
 
 export function getMockPendingAccessRequests(): PendingAccessRequest[] {
+  assertAdminRole();
   return clonePendingRequests(getMockPendingStore());
+}
+
+export function getMockHistoryAccessRequests(): AccessRequestHistoryItem[] {
+  assertAdminRole();
+  return cloneHistoryRequests(getMockHistoryStore());
 }
 
 export function createMockAccessRequest(payload: CreateAccessRequestPayload): PendingAccessRequest {
   console.info('[HITL mock create]', payload);
 
+  const identity = getDemoIdentity();
   const created: PendingAccessRequest = {
     requestId: `req-mock-${Date.now()}`,
-    employeeId: 'E-MOCK-042',
+    employeeId: identity.role === 'admin' ? 'E-MOCK-ADMIN' : 'E-MOCK-042',
     targetEntitlement: payload.targetEntitlement,
     justification: payload.justification,
     currentEntitlements: ['prod-postgres-read'],
@@ -157,15 +234,51 @@ export function applyMockDecision(
   payload: AccessRequestDecisionPayload,
   status: AccessRequestDecisionResult['status'],
 ): AccessRequestDecisionResult {
+  assertAdminRole();
   console.info('[HITL mock decision]', payload, { status });
 
-  const store = getMockPendingStore();
-  const exists = store.some((request) => request.requestId === payload.requestId);
-  if (!exists) {
-    throw new Error(`Mock pending access request not found: ${payload.requestId}`);
+  const identity = getDemoIdentity();
+  const pendingStore = getMockPendingStore();
+  const pendingMatch = pendingStore.find((request) => request.requestId === payload.requestId);
+
+  if (pendingMatch !== undefined) {
+    setMockPendingStore(pendingStore.filter((request) => request.requestId !== payload.requestId));
+    const historyItem: AccessRequestHistoryItem = {
+      ...pendingMatch,
+      status: toHistoryStatus(status),
+      decidedAt: new Date().toISOString(),
+      decidedByAdminId: identity.actorId,
+    };
+    setMockHistoryStore([historyItem, ...getMockHistoryStore()]);
+    return {
+      requestId: payload.requestId,
+      status,
+    };
   }
 
-  setMockPendingStore(store.filter((request) => request.requestId !== payload.requestId));
+  const historyStore = getMockHistoryStore();
+  const historyMatch = historyStore.find((request) => request.requestId === payload.requestId);
+  if (historyMatch === undefined) {
+    throw new Error(`Mock access request not found: ${payload.requestId}`);
+  }
+
+  const nextStatus = toHistoryStatus(status);
+  if (historyMatch.status === nextStatus) {
+    throw new Error(`Mock access request already has status ${nextStatus}`);
+  }
+
+  setMockHistoryStore(
+    historyStore.map((request) =>
+      request.requestId === payload.requestId
+        ? {
+            ...request,
+            status: nextStatus,
+            decidedAt: new Date().toISOString(),
+            decidedByAdminId: identity.actorId,
+          }
+        : request,
+    ),
+  );
 
   return {
     requestId: payload.requestId,

@@ -1,6 +1,8 @@
+import { setDemoIdentity } from '../lib/demo-identity';
 import {
   applyMockDecision,
   createMockAccessRequest,
+  getMockHistoryAccessRequests,
   getMockPendingAccessRequests,
   MOCK_PENDING_ACCESS_REQUESTS,
   resetMockPendingAccessRequests,
@@ -9,6 +11,7 @@ import {
 describe('pending-access-requests mock store', () => {
   beforeEach(() => {
     resetMockPendingAccessRequests();
+    setDemoIdentity('admin');
     jest.spyOn(console, 'info').mockImplementation(() => undefined);
   });
 
@@ -34,7 +37,12 @@ describe('pending-access-requests mock store', () => {
     expect(getMockPendingAccessRequests()[0]?.requestId).toBe(created.requestId);
   });
 
-  it('removes a request on escalate and logs the admin_id payload', () => {
+  it('rejects pending list access for user role', () => {
+    setDemoIdentity('user');
+    expect(() => getMockPendingAccessRequests()).toThrow(/admin role required/);
+  });
+
+  it('moves a pending request into history on escalate', () => {
     const first = MOCK_PENDING_ACCESS_REQUESTS[0];
     if (first === undefined) {
       throw new Error('Expected at least one mock pending request');
@@ -42,7 +50,6 @@ describe('pending-access-requests mock store', () => {
 
     const payload = {
       requestId: first.requestId,
-      admin_id: 'admin-123',
     };
 
     const result = applyMockDecision(payload, 'escalated');
@@ -54,8 +61,26 @@ describe('pending-access-requests mock store', () => {
     expect(getMockPendingAccessRequests().map((request) => request.requestId)).not.toContain(
       first.requestId,
     );
+    expect(getMockHistoryAccessRequests()[0]?.requestId).toBe(first.requestId);
+    expect(getMockHistoryAccessRequests()[0]?.status).toBe('ESCALATED');
     expect(console.info).toHaveBeenCalledWith('[HITL mock decision]', payload, {
       status: 'escalated',
     });
+  });
+
+  it('overrides a history decision to a different status', () => {
+    const history = getMockHistoryAccessRequests();
+    const first = history[0];
+    if (first === undefined) {
+      throw new Error('Expected at least one mock history request');
+    }
+
+    const result = applyMockDecision({ requestId: first.requestId }, 'denied');
+
+    expect(result.status).toBe('denied');
+    expect(
+      getMockHistoryAccessRequests().find((request) => request.requestId === first.requestId)
+        ?.status,
+    ).toBe('DENIED');
   });
 });

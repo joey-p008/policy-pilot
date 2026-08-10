@@ -1,6 +1,7 @@
 import type {
   AccessRequestDecisionPayload,
   AccessRequestDecisionResult,
+  AccessRequestHistoryItem,
   CreateAccessRequestPayload,
   PendingAccessRequest,
 } from '@policy-pilot/shared-types';
@@ -9,11 +10,14 @@ import { apiClient } from '../lib/apiClient';
 import {
   applyMockDecision,
   createMockAccessRequest,
+  getMockHistoryAccessRequests,
   getMockPendingAccessRequests,
 } from '../mocks/pending-access-requests';
 
-export const ACCESS_REQUESTS_PENDING_QUERY_KEY = ['access-requests', 'pending'] as const;
-export { MOCK_HITL_ADMIN_ID } from './hitl-constants';
+export {
+  ACCESS_REQUESTS_HISTORY_QUERY_KEY,
+  ACCESS_REQUESTS_PENDING_QUERY_KEY,
+} from './access-request-keys';
 
 function shouldUseHitlMockData(): boolean {
   return import.meta.env.VITE_HITL_USE_MOCK_DATA === 'true';
@@ -25,6 +29,15 @@ export async function fetchPendingAccessRequests(): Promise<PendingAccessRequest
   }
 
   const response = await apiClient.get<PendingAccessRequest[]>('/access-requests/pending');
+  return response.data;
+}
+
+export async function fetchAccessRequestHistory(): Promise<AccessRequestHistoryItem[]> {
+  if (shouldUseHitlMockData()) {
+    return getMockHistoryAccessRequests();
+  }
+
+  const response = await apiClient.get<AccessRequestHistoryItem[]>('/access-requests/history');
   return response.data;
 }
 
@@ -48,7 +61,6 @@ export async function approveAccessRequest(
 
   const response = await apiClient.post<AccessRequestDecisionResult>(
     `/access-requests/${payload.requestId}/approve`,
-    { admin_id: payload.admin_id },
   );
   return response.data;
 }
@@ -62,7 +74,6 @@ export async function denyAccessRequest(
 
   const response = await apiClient.post<AccessRequestDecisionResult>(
     `/access-requests/${payload.requestId}/deny`,
-    { admin_id: payload.admin_id },
   );
   return response.data;
 }
@@ -76,7 +87,6 @@ export async function escalateAccessRequest(
 
   const response = await apiClient.post<AccessRequestDecisionResult>(
     `/access-requests/${payload.requestId}/escalate`,
-    { admin_id: payload.admin_id },
   );
   return response.data;
 }

@@ -61,6 +61,21 @@ export class AccessRequestRepository {
     });
   }
 
+  public async findDecided(): Promise<AccessRequest[]> {
+    return this.prisma.accessRequest.findMany({
+      where: {
+        status: {
+          in: [
+            ACCESS_REQUEST_STATUS.APPROVED,
+            ACCESS_REQUEST_STATUS.DENIED,
+            ACCESS_REQUEST_STATUS.ESCALATED,
+          ],
+        },
+      },
+      orderBy: { decidedAt: 'desc' },
+    });
+  }
+
   public async markDecided(input: DecideAccessRequestInput): Promise<AccessRequest> {
     return this.prisma.accessRequest.update({
       where: { requestId: input.requestId },
