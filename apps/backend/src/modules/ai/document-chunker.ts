@@ -11,8 +11,11 @@ export const DOCUMENT_CHUNK_SIZE = 1000;
 export const DOCUMENT_CHUNK_OVERLAP = 200;
 export const DEFAULT_SECTION_TITLE = 'General';
 
-const HEADING_MAX_LENGTH = 120;
+const HEADING_MAX_LENGTH = 160;
 const NUMBERED_HEADING_PATTERN = /^\d+(\.\d+)*[.)]?\s+\S+/;
+const CLAUSE_HEADING_PATTERN = /^CLAUSE\s+\d+(\.\d+)*\b/i;
+const SECTION_HEADING_PATTERN = /^SECTION\s+\d+(\.\d+)*\b/i;
+const APPENDIX_HEADING_PATTERN = /^Appendix\b/i;
 const TITLE_CASE_PATTERN = /^[A-Z][A-Za-z0-9/'&,:\- ]+$/;
 
 export class DocumentChunker {
@@ -82,6 +85,18 @@ export class DocumentChunker {
   private isHeadingLike(line: string): boolean {
     if (line.length === 0 || line.length > HEADING_MAX_LENGTH) {
       return false;
+    }
+
+    if (CLAUSE_HEADING_PATTERN.test(line)) {
+      return true;
+    }
+
+    if (SECTION_HEADING_PATTERN.test(line)) {
+      return true;
+    }
+
+    if (APPENDIX_HEADING_PATTERN.test(line)) {
+      return true;
     }
 
     if (NUMBERED_HEADING_PATTERN.test(line)) {

@@ -59,6 +59,33 @@ describe('DocumentChunker', () => {
     expect(chunks[0]?.section_title).toBe(DEFAULT_SECTION_TITLE);
   });
 
+  it('detects CLAUSE, SECTION, and Appendix policy headings', async () => {
+    const clauseChunks = await chunker.chunkDocument({
+      documentId: 'POL-TEST-CLAUSE',
+      pageNumber: 1,
+      text: 'CLAUSE 3.2 — Departmental Cost Center Registration\nPersonnel in CC-FIN-07 qualify for baseline read access.',
+    });
+    expect(clauseChunks[0]?.section_title).toBe(
+      'CLAUSE 3.2 — Departmental Cost Center Registration',
+    );
+
+    const sectionChunks = await chunker.chunkDocument({
+      documentId: 'POL-TEST-SECTION',
+      pageNumber: 1,
+      text: 'SECTION 5.0 — Bulk Data Export Restrictions\nBulk exports require DPO approval.',
+    });
+    expect(sectionChunks[0]?.section_title).toBe('SECTION 5.0 — Bulk Data Export Restrictions');
+
+    const appendixChunks = await chunker.chunkDocument({
+      documentId: 'POL-TEST-APPENDIX',
+      pageNumber: 2,
+      text: 'Appendix B — Separation of Duties (SoD) & Anti-Fraud Conflict Rules\nFIN_DATASET_EDIT and FIN_BILLING_EXPORT may not coexist.',
+    });
+    expect(appendixChunks[0]?.section_title).toBe(
+      'Appendix B — Separation of Duties (SoD) & Anti-Fraud Conflict Rules',
+    );
+  });
+
   it('returns an empty array for blank text', async () => {
     const chunks = await chunker.chunkDocument({
       documentId: 'POL-TEST-EMPTY',

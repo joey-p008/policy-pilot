@@ -119,6 +119,7 @@ export class HitlAccessRequestsService {
       requestId,
       targetEntitlement: dto.targetEntitlement,
       justification: dto.justification,
+      currentEntitlements,
     });
 
     const decision = await this.decisionEngineService.decide({
@@ -126,6 +127,7 @@ export class HitlAccessRequestsService {
         requestId,
         targetEntitlement: dto.targetEntitlement,
         justification: dto.justification,
+        currentEntitlements,
       },
       policyChunks,
     });

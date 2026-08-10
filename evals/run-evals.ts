@@ -14,6 +14,8 @@ import type { PolicyDocumentChunk } from '../apps/backend/src/modules/ai/dto/doc
 import { executeWithObservability } from '../apps/backend/src/modules/ai/observability/llm-observability.wrapper';
 import { ACCESS_DECISION_PROMPT_KEY } from '../apps/backend/src/modules/ai/prompts/access-decision.prompt';
 import {
+  DECISION_JSON_SCHEMA_NAME,
+  DecisionJsonSchema,
   DecisionSchema,
   RecommendationDecisionSchema,
   type Decision,
@@ -58,7 +60,8 @@ const GoldenScenarioSchema = z.object({
     requested_entitlement: z.string().min(1),
     current_entitlements: z.array(z.string()),
   }),
-  expected_retrieved_chunks: z.array(ExpectedRetrievedChunkSchema).min(1),
+  // Empty arrays are valid for adversarial / non-retrieval scenarios (e.g. prompt injection).
+  expected_retrieved_chunks: z.array(ExpectedRetrievedChunkSchema),
   expected_agent_output: z.object({
     decision: RecommendationDecisionSchema,
     rationale: z.string().min(1),
@@ -202,19 +205,20 @@ function citationKey(chunk: {
   return `${normalizeDocumentId(chunk.document_id)}|${chunk.page_number}|${normalizeSectionTitle(chunk.section_title)}`;
 }
 
-function buildJustification(scenario: GoldenScenario): string {
-  const entitlements =
-    scenario.webhook_input.current_entitlements.length === 0
-      ? 'none'
-      : scenario.webhook_input.current_entitlements.join(', ');
-
-  return [
-    `Department: ${scenario.webhook_input.department}.`,
-    `Cost center: ${scenario.webhook_input.cost_center}.`,
-    `Target resource: ${scenario.webhook_input.target_resource}.`,
-    `Current entitlements: ${entitlements}.`,
-    scenario.description,
-  ].join(' ');
+function buildScenarioContext(scenario: GoldenScenario): {
+  readonly justification: string;
+  readonly costCenter: string;
+  readonly department: string;
+  readonly targetResource: string;
+  readonly currentEntitlements: ReadonlyArray<string>;
+} {
+  return {
+    justification: scenario.description,
+    costCenter: scenario.webhook_input.cost_center,
+    department: scenario.webhook_input.department,
+    targetResource: scenario.webhook_input.target_resource,
+    currentEntitlements: scenario.webhook_input.current_entitlements,
+  };
 }
 
 function percentileNearestRank(sortedAscending: ReadonlyArray<number>, percentile: number): number {
@@ -309,6 +313,10 @@ async function runDecisionEngine(params: {
   readonly requestId: string;
   readonly targetEntitlement: string;
   readonly justification: string;
+  readonly costCenter: string;
+  readonly department: string;
+  readonly targetResource: string;
+  readonly currentEntitlements: ReadonlyArray<string>;
   readonly policyChunks: ReadonlyArray<PolicyDocumentChunk>;
 }): Promise<{
   readonly actual: Decision | null;
@@ -321,6 +329,10 @@ async function runDecisionEngine(params: {
       request_id: params.requestId,
       target_entitlement: params.targetEntitlement,
       justification: params.justification,
+      department: params.department,
+      cost_center: params.costCenter,
+      target_resource: params.targetResource,
+      current_entitlements: params.currentEntitlements,
     },
     policy_chunks: params.policyChunks,
   };
@@ -330,7 +342,11 @@ async function runDecisionEngine(params: {
       promptKey: ACCESS_DECISION_PROMPT_KEY,
       model: params.chatClient.model,
       payload,
-      execute: (assembledPrompt: string) => params.chatClient.complete(assembledPrompt),
+      execute: (assembledPrompt: string) =>
+        params.chatClient.complete(assembledPrompt, {
+          jsonSchema: DecisionJsonSchema,
+          schemaName: DECISION_JSON_SCHEMA_NAME,
+        }),
     },
     DecisionSchema,
   );
@@ -350,7 +366,7 @@ async function evaluateScenario(params: {
   readonly k: number;
 }): Promise<ScenarioReport> {
   const { scenario, retrievalService, chatClient, k } = params;
-  const justification = buildJustification(scenario);
+  const context = buildScenarioContext(scenario);
   const expectedChunkKeys = scenario.expected_retrieved_chunks.map((chunk) => citationKey(chunk));
 
   let retrieved: PolicyDocumentChunk[] = [];
@@ -366,7 +382,11 @@ async function evaluateScenario(params: {
     retrieved = await retrievalService.retrieve({
       requestId: scenario.webhook_input.request_id,
       targetEntitlement: scenario.webhook_input.requested_entitlement,
-      justification,
+      justification: context.justification,
+      costCenter: context.costCenter,
+      department: context.department,
+      targetResource: context.targetResource,
+      currentEntitlements: [...context.currentEntitlements],
     });
 
     try {
@@ -374,7 +394,11 @@ async function evaluateScenario(params: {
         chatClient,
         requestId: scenario.webhook_input.request_id,
         targetEntitlement: scenario.webhook_input.requested_entitlement,
-        justification,
+        justification: context.justification,
+        costCenter: context.costCenter,
+        department: context.department,
+        targetResource: context.targetResource,
+        currentEntitlements: context.currentEntitlements,
         policyChunks: retrieved,
       });
       latencyMs = Date.now() - startedAt;
@@ -546,7 +570,7 @@ async function main(): Promise<void> {
 
   try {
     const retrievalService = app.get(RetrievalService);
-    // Resolve DecisionEngineService to confirm Nest AI wiring matches production.
+    // Confirm Nest wires the production DecisionEngineService (same prompt + JSON schema path).
     app.get(DecisionEngineService);
     const chatClient = app.get<ChatClient>(CHAT_CLIENT);
     const golden = await loadGoldenDataset();

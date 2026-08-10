@@ -4,7 +4,7 @@ import OpenAI, { APIError } from 'openai';
 import { z } from 'zod';
 
 import type { LlmExecutionResult } from '../observability/llm-observability.types';
-import type { ChatClient } from './chat.types';
+import type { ChatClient, ChatCompletionOptions } from './chat.types';
 
 const chatEnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
@@ -33,14 +33,29 @@ export class OpenAiChatClient implements ChatClient {
     this.maxRetries = env.OPENAI_CHAT_MAX_RETRIES;
   }
 
-  public async complete(prompt: string): Promise<LlmExecutionResult> {
+  public async complete(
+    prompt: string,
+    options?: ChatCompletionOptions,
+  ): Promise<LlmExecutionResult> {
     let lastError: unknown;
+
+    const responseFormat =
+      options?.jsonSchema === undefined
+        ? ({ type: 'json_object' } as const)
+        : ({
+            type: 'json_schema' as const,
+            json_schema: {
+              name: options.schemaName ?? 'structured_output',
+              strict: true,
+              schema: options.jsonSchema,
+            },
+          } as const);
 
     for (let attempt = 0; attempt < this.maxRetries; attempt += 1) {
       try {
         const response = await this.client.chat.completions.create({
           model: this.model,
-          response_format: { type: 'json_object' },
+          response_format: responseFormat,
           messages: [
             {
               role: 'user',

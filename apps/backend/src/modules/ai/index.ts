@@ -25,7 +25,7 @@ export {
   type IngestPoliciesResult,
   type PolicyDocumentChunk,
 } from './dto/document-ingestion.dto';
-export { CHAT_CLIENT, type ChatClient } from './chat/chat.types';
+export { CHAT_CLIENT, type ChatClient, type ChatCompletionOptions } from './chat/chat.types';
 export { OpenAiChatClient } from './chat/openai-chat.client';
 export { DecisionEngineService, type DecisionEngineInput } from './decision-engine.service';
 export {
@@ -41,6 +41,8 @@ export {
 export { RETRIEVAL_TOP_K, RetrievalService } from './retrieval.service';
 
 export {
+  DECISION_JSON_SCHEMA_NAME,
+  DecisionJsonSchema,
   DecisionSchema,
   PolicyCitationSchema,
   RecommendationDecisionSchema,
