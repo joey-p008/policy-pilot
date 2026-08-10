@@ -1,0 +1,33 @@
+# Dependencies and build outputs
+node_modules
+**/node_modules
+**/dist
+coverage
+**/.turbo
+**/*.tsbuildinfo
+
+# VCS and editor
+.git
+.gitignore
+.cursor
+.vscode
+.idea
+.DS_Store
+
+# Env and secrets (never bake into images)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local / generated artifacts
+evals/output
+*.log
+apps/backend/data/policies/*.pdf
+
+# Docs and non-runtime noise
+*.md
+docs
+AGENTS.md
+
+# Git hooks (root prepare/husky not needed in image)
+.husky
