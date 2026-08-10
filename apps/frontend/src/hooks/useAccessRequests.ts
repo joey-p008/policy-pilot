@@ -1,3 +1,7 @@
+import type {
+  AccessRequestDecisionPayload,
+  PendingAccessRequest,
+} from '@policy-pilot/shared-types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -7,6 +11,51 @@ import {
   fetchPendingAccessRequests,
 } from '../api/access-requests';
 
+type DecisionMutationContext = {
+  previousPending: PendingAccessRequest[] | undefined;
+};
+
+function removeRequestFromPendingCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  requestId: string,
+): PendingAccessRequest[] | undefined {
+  const previousPending = queryClient.getQueryData<PendingAccessRequest[]>(
+    ACCESS_REQUESTS_PENDING_QUERY_KEY,
+  );
+
+  queryClient.setQueryData<PendingAccessRequest[]>(ACCESS_REQUESTS_PENDING_QUERY_KEY, (current) =>
+    (current ?? []).filter((request) => request.requestId !== requestId),
+  );
+
+  return previousPending;
+}
+
+function useDecisionMutation(mutationFn: typeof approveAccessRequest | typeof denyAccessRequest) {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Awaited<ReturnType<typeof mutationFn>>,
+    Error,
+    AccessRequestDecisionPayload,
+    DecisionMutationContext
+  >({
+    mutationFn,
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
+      const previousPending = removeRequestFromPendingCache(queryClient, payload.requestId);
+      return { previousPending };
+    },
+    onError: (_error, _payload, context) => {
+      if (context?.previousPending !== undefined) {
+        queryClient.setQueryData(ACCESS_REQUESTS_PENDING_QUERY_KEY, context.previousPending);
+      }
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
+    },
+  });
+}
+
 export function usePendingRequests() {
   return useQuery({
     queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY,
@@ -15,23 +64,9 @@ export function usePendingRequests() {
 }
 
 export function useApproveRequest() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: approveAccessRequest,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
-    },
-  });
+  return useDecisionMutation(approveAccessRequest);
 }
 
 export function useDenyRequest() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: denyAccessRequest,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
-    },
-  });
+  return useDecisionMutation(denyAccessRequest);
 }

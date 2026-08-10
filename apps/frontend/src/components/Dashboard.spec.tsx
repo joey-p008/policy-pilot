@@ -3,6 +3,7 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
+import { MOCK_HITL_ADMIN_ID } from '../api/hitl-constants';
 import { useApproveRequest, useDenyRequest, usePendingRequests } from '../hooks/useAccessRequests';
 import { MOCK_PENDING_ACCESS_REQUESTS } from '../mocks/pending-access-requests';
 import { Dashboard } from './Dashboard';
@@ -28,7 +29,10 @@ if (denyRequest === undefined) {
 function mockMutationIdle() {
   return {
     mutate: jest.fn(),
+    reset: jest.fn(),
     isPending: false,
+    isError: false,
+    error: null,
   };
 }
 
@@ -92,9 +96,124 @@ describe('Dashboard', () => {
       '91',
     );
     expect(screen.getByText(denyRequest.recommendation.rationale)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Manual Override' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Approve Recommendation' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Deny Request' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Manual Override' })).toBeEnabled();
+  });
+
+  it('fires approve and deny mutations with hardcoded admin_id', () => {
+    const approveMutate = jest.fn();
+    const denyMutate = jest.fn();
+
+    mockedUsePendingRequests.mockReturnValue({
+      data: [denyRequest],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof usePendingRequests>);
+    mockedUseApproveRequest.mockReturnValue({
+      mutate: approveMutate,
+      reset: jest.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useApproveRequest>);
+    mockedUseDenyRequest.mockReturnValue({
+      mutate: denyMutate,
+      reset: jest.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useDenyRequest>);
+
+    render(<Dashboard />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve Recommendation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deny Request' }));
+
+    expect(approveMutate).toHaveBeenCalledWith({
+      requestId: denyRequest.requestId,
+      admin_id: MOCK_HITL_ADMIN_ID,
+    });
+    expect(denyMutate).toHaveBeenCalledWith({
+      requestId: denyRequest.requestId,
+      admin_id: MOCK_HITL_ADMIN_ID,
+    });
+  });
+
+  it('manual override inverts a DENY recommendation via approve', () => {
+    const approveMutate = jest.fn();
+    const denyMutate = jest.fn();
+
+    mockedUsePendingRequests.mockReturnValue({
+      data: [denyRequest],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof usePendingRequests>);
+    mockedUseApproveRequest.mockReturnValue({
+      mutate: approveMutate,
+      reset: jest.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useApproveRequest>);
+    mockedUseDenyRequest.mockReturnValue({
+      mutate: denyMutate,
+      reset: jest.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useDenyRequest>);
+
+    render(<Dashboard />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manual Override' }));
+
+    expect(approveMutate).toHaveBeenCalledWith({
+      requestId: denyRequest.requestId,
+      admin_id: MOCK_HITL_ADMIN_ID,
+    });
+    expect(denyMutate).not.toHaveBeenCalled();
+  });
+
+  it('shows a dismissible mutation error alert', () => {
+    const resetApprove = jest.fn();
+    const resetDeny = jest.fn();
+
+    mockedUsePendingRequests.mockReturnValue({
+      data: [denyRequest],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof usePendingRequests>);
+    mockedUseApproveRequest.mockReturnValue({
+      mutate: jest.fn(),
+      reset: resetApprove,
+      isPending: false,
+      isError: true,
+      error: new Error('Backend rejected approve'),
+    } as ReturnType<typeof useApproveRequest>);
+    mockedUseDenyRequest.mockReturnValue({
+      mutate: jest.fn(),
+      reset: resetDeny,
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useDenyRequest>);
+
+    render(<Dashboard />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Backend rejected approve');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(resetApprove).toHaveBeenCalledTimes(1);
+    expect(resetDeny).toHaveBeenCalledTimes(1);
   });
 
   it('expands entitlements comparison for current vs requested', () => {

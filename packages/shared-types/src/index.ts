@@ -26,6 +26,11 @@ export interface PendingAccessRequest extends BaseAccessRequest {
   recommendation: AccessRecommendation;
 }
 
+export interface AccessRequestDecisionPayload {
+  requestId: string;
+  admin_id: string;
+}
+
 export interface AccessRequestDecisionResult {
   requestId: string;
   status: 'approved' | 'denied';

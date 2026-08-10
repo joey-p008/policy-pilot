@@ -1,6 +1,7 @@
 import type { PendingAccessRequest, PolicyCitation } from '@policy-pilot/shared-types';
 import { useState, type JSX } from 'react';
 
+import { MOCK_HITL_ADMIN_ID } from '../api/hitl-constants';
 import { useApproveRequest, useDenyRequest, usePendingRequests } from '../hooks/useAccessRequests';
 import { ConfidenceGauge } from './ConfidenceGauge';
 import { DecisionBadge } from './DecisionBadge';
@@ -8,6 +9,13 @@ import { PolicyCitationModal } from './PolicyCitationModal';
 
 function citationLabel(citation: PolicyCitation): string {
   return `${citation.documentId} p.${citation.pageNumber} (${citation.sectionTitle})`;
+}
+
+function buildDecisionPayload(requestId: string) {
+  return {
+    requestId,
+    admin_id: MOCK_HITL_ADMIN_ID,
+  };
 }
 
 function EntitlementsExpander({ request }: { request: PendingAccessRequest }): JSX.Element {
@@ -47,12 +55,14 @@ function RequestCard({
   actionsDisabled,
   onApprove,
   onDeny,
+  onManualOverride,
   onOpenCitation,
 }: {
   request: PendingAccessRequest;
   actionsDisabled: boolean;
   onApprove: (requestId: string) => void;
   onDeny: (requestId: string) => void;
+  onManualOverride: (request: PendingAccessRequest) => void;
   onOpenCitation: (citation: PolicyCitation) => void;
 }): JSX.Element {
   return (
@@ -108,7 +118,7 @@ function RequestCard({
             onApprove(request.requestId);
           }}
         >
-          Approve
+          Approve Recommendation
         </button>
         <button
           type="button"
@@ -118,13 +128,15 @@ function RequestCard({
             onDeny(request.requestId);
           }}
         >
-          Deny
+          Deny Request
         </button>
         <button
           type="button"
-          className="rounded border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled
-          title="Manual Override is not available yet"
+          className="rounded border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={actionsDisabled}
+          onClick={() => {
+            onManualOverride(request);
+          }}
         >
           Manual Override
         </button>
@@ -139,12 +151,14 @@ function PendingRequestsList({
   denyPending,
   onApprove,
   onDeny,
+  onManualOverride,
 }: {
   requests: PendingAccessRequest[];
   approvePending: boolean;
   denyPending: boolean;
   onApprove: (requestId: string) => void;
   onDeny: (requestId: string) => void;
+  onManualOverride: (request: PendingAccessRequest) => void;
 }): JSX.Element {
   const [activeCitation, setActiveCitation] = useState<PolicyCitation | null>(null);
   const actionsDisabled = approvePending || denyPending;
@@ -159,6 +173,7 @@ function PendingRequestsList({
             actionsDisabled={actionsDisabled}
             onApprove={onApprove}
             onDeny={onDeny}
+            onManualOverride={onManualOverride}
             onOpenCitation={setActiveCitation}
           />
         ))}
@@ -175,10 +190,24 @@ function PendingRequestsList({
   );
 }
 
+function mutationErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export function Dashboard(): JSX.Element {
   const { data, isPending, isError, error, refetch, isSuccess } = usePendingRequests();
   const approve = useApproveRequest();
   const deny = useDenyRequest();
+
+  const decisionError =
+    approve.error !== null
+      ? mutationErrorMessage(approve.error, 'Failed to approve access request.')
+      : deny.error !== null
+        ? mutationErrorMessage(deny.error, 'Failed to deny access request.')
+        : null;
 
   let body: JSX.Element;
 
@@ -219,10 +248,22 @@ export function Dashboard(): JSX.Element {
         approvePending={approve.isPending}
         denyPending={deny.isPending}
         onApprove={(requestId) => {
-          approve.mutate(requestId);
+          deny.reset();
+          approve.mutate(buildDecisionPayload(requestId));
         }}
         onDeny={(requestId) => {
-          deny.mutate(requestId);
+          approve.reset();
+          deny.mutate(buildDecisionPayload(requestId));
+        }}
+        onManualOverride={(request) => {
+          const payload = buildDecisionPayload(request.requestId);
+          if (request.recommendation.decision === 'APPROVE') {
+            approve.reset();
+            deny.mutate(payload);
+            return;
+          }
+          deny.reset();
+          approve.mutate(payload);
         }}
       />
     );
@@ -238,6 +279,23 @@ export function Dashboard(): JSX.Element {
           denying access.
         </p>
       </header>
+      {decisionError !== null ? (
+        <div className="space-y-3 rounded-lg border border-rose-900/60 bg-rose-950/40 px-4 py-4">
+          <p className="text-rose-200" role="alert">
+            {decisionError}
+          </p>
+          <button
+            type="button"
+            className="rounded bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-900 hover:bg-white"
+            onClick={() => {
+              approve.reset();
+              deny.reset();
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       {body}
     </div>
   );
