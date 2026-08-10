@@ -6,25 +6,31 @@ import type { PendingAccessRequest } from '@policy-pilot/shared-types';
 import type { JSX, ReactNode } from 'react';
 
 import {
+  ACCESS_REQUESTS_HISTORY_QUERY_KEY,
   ACCESS_REQUESTS_PENDING_QUERY_KEY,
+} from '../api/access-request-keys';
+import {
   approveAccessRequest,
   createAccessRequest,
   denyAccessRequest,
   escalateAccessRequest,
+  fetchAccessRequestHistory,
   fetchPendingAccessRequests,
 } from '../api/access-requests';
-import { MOCK_HITL_ADMIN_ID } from '../api/hitl-constants';
+import { DemoRoleProvider } from '../context/DemoRoleContext';
+import { setDemoIdentity } from '../lib/demo-identity';
 import {
   useApproveRequest,
   useDenyRequest,
   useEscalateRequest,
   usePendingRequests,
+  useRequestHistory,
   useSubmitAccessRequest,
 } from './useAccessRequests';
 
 jest.mock('../api/access-requests', () => ({
-  ACCESS_REQUESTS_PENDING_QUERY_KEY: ['access-requests', 'pending'],
   fetchPendingAccessRequests: jest.fn(),
+  fetchAccessRequestHistory: jest.fn(),
   createAccessRequest: jest.fn(),
   approveAccessRequest: jest.fn(),
   denyAccessRequest: jest.fn(),
@@ -33,6 +39,9 @@ jest.mock('../api/access-requests', () => ({
 
 const mockedFetchPendingAccessRequests = fetchPendingAccessRequests as jest.MockedFunction<
   typeof fetchPendingAccessRequests
+>;
+const mockedFetchAccessRequestHistory = fetchAccessRequestHistory as jest.MockedFunction<
+  typeof fetchAccessRequestHistory
 >;
 const mockedCreateAccessRequest = createAccessRequest as jest.MockedFunction<
   typeof createAccessRequest
@@ -68,7 +77,6 @@ const pendingRequest: PendingAccessRequest = {
 
 const decisionPayload = {
   requestId: 'req-1',
-  admin_id: MOCK_HITL_ADMIN_ID,
 };
 
 function createWrapper() {
@@ -84,16 +92,21 @@ function createWrapper() {
   });
 
   return function Wrapper({ children }: { children: ReactNode }): JSX.Element {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <DemoRoleProvider>{children}</DemoRoleProvider>
+      </QueryClientProvider>
+    );
   };
 }
 
 describe('useAccessRequests hooks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    setDemoIdentity('admin');
   });
 
-  it('loads pending access requests', async () => {
+  it('loads pending access requests for admin', async () => {
     mockedFetchPendingAccessRequests.mockResolvedValue([pendingRequest]);
 
     const { result } = renderHook(() => usePendingRequests(), {
@@ -109,7 +122,37 @@ describe('useAccessRequests hooks', () => {
     expect(ACCESS_REQUESTS_PENDING_QUERY_KEY).toEqual(['access-requests', 'pending']);
   });
 
-  it('submits a new request and prepends it to the pending cache', async () => {
+  it('does not fetch pending requests for user role', async () => {
+    setDemoIdentity('user');
+    mockedFetchPendingAccessRequests.mockResolvedValue([pendingRequest]);
+
+    const { result } = renderHook(() => usePendingRequests(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.fetchStatus).toBe('idle');
+    });
+
+    expect(mockedFetchPendingAccessRequests).not.toHaveBeenCalled();
+  });
+
+  it('loads history for admin', async () => {
+    mockedFetchAccessRequestHistory.mockResolvedValue([]);
+
+    const { result } = renderHook(() => useRequestHistory(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(mockedFetchAccessRequestHistory).toHaveBeenCalledTimes(1);
+    expect(ACCESS_REQUESTS_HISTORY_QUERY_KEY).toEqual(['access-requests', 'history']);
+  });
+
+  it('submits a new request and prepends it to the pending cache for admin', async () => {
     mockedFetchPendingAccessRequests.mockResolvedValueOnce([]).mockResolvedValue([pendingRequest]);
     mockedCreateAccessRequest.mockResolvedValue(pendingRequest);
 
@@ -145,6 +188,7 @@ describe('useAccessRequests hooks', () => {
     mockedFetchPendingAccessRequests
       .mockResolvedValueOnce([pendingRequest])
       .mockResolvedValueOnce([]);
+    mockedFetchAccessRequestHistory.mockResolvedValue([]);
     mockedApproveAccessRequest.mockResolvedValue({
       requestId: 'req-1',
       status: 'approved',
@@ -176,6 +220,7 @@ describe('useAccessRequests hooks', () => {
     mockedFetchPendingAccessRequests
       .mockResolvedValueOnce([pendingRequest])
       .mockResolvedValueOnce([]);
+    mockedFetchAccessRequestHistory.mockResolvedValue([]);
     mockedDenyAccessRequest.mockResolvedValue({
       requestId: 'req-1',
       status: 'denied',
@@ -207,6 +252,7 @@ describe('useAccessRequests hooks', () => {
     mockedFetchPendingAccessRequests
       .mockResolvedValueOnce([pendingRequest])
       .mockResolvedValueOnce([]);
+    mockedFetchAccessRequestHistory.mockResolvedValue([]);
     mockedEscalateAccessRequest.mockResolvedValue({
       requestId: 'req-1',
       status: 'escalated',

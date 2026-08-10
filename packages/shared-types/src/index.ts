@@ -32,12 +32,24 @@ export interface PendingAccessRequest extends BaseAccessRequest {
   recommendation: AccessRecommendation;
 }
 
+export type AccessRequestHistoryStatus = 'APPROVED' | 'DENIED' | 'ESCALATED';
+
+export interface AccessRequestHistoryItem extends BaseAccessRequest {
+  justification: string;
+  currentEntitlements: string[];
+  recommendation: AccessRecommendation;
+  status: AccessRequestHistoryStatus;
+  decidedAt: string;
+  decidedByAdminId: string | null;
+}
+
 export interface AccessRequestDecisionPayload {
   requestId: string;
-  admin_id: string;
 }
 
 export interface AccessRequestDecisionResult {
   requestId: string;
   status: 'approved' | 'denied' | 'escalated';
 }
+
+export type DemoRole = 'user' | 'admin';

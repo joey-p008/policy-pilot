@@ -3,23 +3,20 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
-import { MOCK_HITL_ADMIN_ID } from '../api/hitl-constants';
 import {
   useApproveRequest,
   useDenyRequest,
   useEscalateRequest,
   usePendingRequests,
-  useSubmitAccessRequest,
 } from '../hooks/useAccessRequests';
 import { MOCK_PENDING_ACCESS_REQUESTS } from '../mocks/pending-access-requests';
-import { Dashboard } from './Dashboard';
+import { HitlReviewPage } from './HitlReviewPage';
 
 jest.mock('../hooks/useAccessRequests', () => ({
   usePendingRequests: jest.fn(),
   useApproveRequest: jest.fn(),
   useDenyRequest: jest.fn(),
   useEscalateRequest: jest.fn(),
-  useSubmitAccessRequest: jest.fn(),
 }));
 
 const mockedUsePendingRequests = usePendingRequests as jest.MockedFunction<
@@ -29,9 +26,6 @@ const mockedUseApproveRequest = useApproveRequest as jest.MockedFunction<typeof 
 const mockedUseDenyRequest = useDenyRequest as jest.MockedFunction<typeof useDenyRequest>;
 const mockedUseEscalateRequest = useEscalateRequest as jest.MockedFunction<
   typeof useEscalateRequest
->;
-const mockedUseSubmitAccessRequest = useSubmitAccessRequest as jest.MockedFunction<
-  typeof useSubmitAccessRequest
 >;
 
 const [denyRequest] = MOCK_PENDING_ACCESS_REQUESTS;
@@ -50,7 +44,7 @@ function mockMutationIdle() {
   };
 }
 
-describe('Dashboard', () => {
+describe('HitlReviewPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedUseApproveRequest.mockReturnValue(
@@ -59,9 +53,6 @@ describe('Dashboard', () => {
     mockedUseDenyRequest.mockReturnValue(mockMutationIdle() as ReturnType<typeof useDenyRequest>);
     mockedUseEscalateRequest.mockReturnValue(
       mockMutationIdle() as ReturnType<typeof useEscalateRequest>,
-    );
-    mockedUseSubmitAccessRequest.mockReturnValue(
-      mockMutationIdle() as ReturnType<typeof useSubmitAccessRequest>,
     );
   });
 
@@ -75,7 +66,7 @@ describe('Dashboard', () => {
       refetch: jest.fn(),
     } as unknown as ReturnType<typeof usePendingRequests>);
 
-    render(<Dashboard />);
+    render(<HitlReviewPage />);
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading pending requests…');
   });
@@ -90,7 +81,7 @@ describe('Dashboard', () => {
       refetch: jest.fn(),
     } as unknown as ReturnType<typeof usePendingRequests>);
 
-    render(<Dashboard />);
+    render(<HitlReviewPage />);
 
     expect(screen.getByRole('status')).toHaveTextContent('No pending access requests.');
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
@@ -106,7 +97,7 @@ describe('Dashboard', () => {
       refetch: jest.fn(),
     } as unknown as ReturnType<typeof usePendingRequests>);
 
-    render(<Dashboard />);
+    render(<HitlReviewPage />);
 
     const card = screen.getByRole('article');
     expect(within(card).getByText('DENY')).toBeInTheDocument();
@@ -121,45 +112,7 @@ describe('Dashboard', () => {
     expect(screen.getByRole('button', { name: 'Escalate' })).toBeEnabled();
   });
 
-  it('submits entitlement and justification through the create mutation', () => {
-    const submitMutate = jest.fn();
-
-    mockedUsePendingRequests.mockReturnValue({
-      data: [],
-      isPending: false,
-      isError: false,
-      isSuccess: true,
-      error: null,
-      refetch: jest.fn(),
-    } as unknown as ReturnType<typeof usePendingRequests>);
-    mockedUseSubmitAccessRequest.mockReturnValue({
-      mutate: submitMutate,
-      reset: jest.fn(),
-      isPending: false,
-      isError: false,
-      error: null,
-    } as ReturnType<typeof useSubmitAccessRequest>);
-
-    render(<Dashboard />);
-
-    fireEvent.change(screen.getByPlaceholderText('e.g. prod-postgres-admin'), {
-      target: { value: 'analytics-warehouse-writer' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Explain why this access is needed…'), {
-      target: { value: 'Quarterly reporting pipeline' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit for recommendation' }));
-
-    expect(submitMutate).toHaveBeenCalledWith(
-      {
-        targetEntitlement: 'analytics-warehouse-writer',
-        justification: 'Quarterly reporting pipeline',
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
-  });
-
-  it('fires approve, deny, and escalate mutations with hardcoded admin_id', () => {
+  it('fires approve, deny, and escalate mutations with requestId only', () => {
     const approveMutate = jest.fn();
     const denyMutate = jest.fn();
     const escalateMutate = jest.fn();
@@ -194,7 +147,7 @@ describe('Dashboard', () => {
       error: null,
     } as ReturnType<typeof useEscalateRequest>);
 
-    render(<Dashboard />);
+    render(<HitlReviewPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve Recommendation' }));
     fireEvent.click(screen.getByRole('button', { name: 'Deny Request' }));
@@ -202,15 +155,12 @@ describe('Dashboard', () => {
 
     expect(approveMutate).toHaveBeenCalledWith({
       requestId: denyRequest.requestId,
-      admin_id: MOCK_HITL_ADMIN_ID,
     });
     expect(denyMutate).toHaveBeenCalledWith({
       requestId: denyRequest.requestId,
-      admin_id: MOCK_HITL_ADMIN_ID,
     });
     expect(escalateMutate).toHaveBeenCalledWith({
       requestId: denyRequest.requestId,
-      admin_id: MOCK_HITL_ADMIN_ID,
     });
   });
 
@@ -224,7 +174,7 @@ describe('Dashboard', () => {
       refetch: jest.fn(),
     } as unknown as ReturnType<typeof usePendingRequests>);
 
-    render(<Dashboard />);
+    render(<HitlReviewPage />);
 
     fireEvent.click(screen.getByText('Compare current entitlements vs requested permission'));
 
@@ -253,7 +203,7 @@ describe('Dashboard', () => {
       throw new Error('Expected mock citation with content');
     }
 
-    render(<Dashboard />);
+    render(<HitlReviewPage />);
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -278,7 +228,7 @@ describe('Dashboard', () => {
       refetch,
     } as unknown as ReturnType<typeof usePendingRequests>);
 
-    render(<Dashboard />);
+    render(<HitlReviewPage />);
 
     expect(screen.getByRole('alert')).toHaveTextContent('Network unavailable');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();

@@ -11,6 +11,7 @@ import { AppService } from './app.service';
 import { AccessRequestsModule } from './modules/access-requests/access-requests.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { IdempotencyModule } from './modules/idempotency/idempotency.module';
 import { QueueModule } from './modules/queue/queue.module';
@@ -43,6 +44,7 @@ function buildFrontendStaticImports(): Array<DynamicModule | Type<unknown>> {
     QueueModule,
     IdempotencyModule,
     AuditLogModule,
+    AuthModule,
     AccessRequestsModule,
     AiModule,
   ],

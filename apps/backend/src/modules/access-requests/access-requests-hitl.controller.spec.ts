@@ -1,10 +1,27 @@
 import { INestApplication } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 
+import {
+  DEMO_ACTOR_ID_HEADER,
+  DEMO_PRINCIPALS,
+  DEMO_ROLE_HEADER,
+} from '../auth/demo-auth.constants';
+import { DemoAuthGuard } from '../auth/demo-auth.guard';
 import { AccessRequestsHitlController } from './access-requests-hitl.controller';
 import { HitlAccessRequestsService } from './hitl-access-requests.service';
+
+const adminHeaders = {
+  [DEMO_ROLE_HEADER]: 'admin',
+  [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.admin.actorId,
+};
+
+const userHeaders = {
+  [DEMO_ROLE_HEADER]: 'user',
+  [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.user.actorId,
+};
 
 describe('AccessRequestsHitlController', () => {
   let app: INestApplication<App>;
@@ -12,11 +29,12 @@ describe('AccessRequestsHitlController', () => {
   const mockHitlService: jest.Mocked<
     Pick<
       HitlAccessRequestsService,
-      'createWithRecommendation' | 'listPending' | 'approve' | 'deny' | 'escalate'
+      'createWithRecommendation' | 'listPending' | 'listHistory' | 'approve' | 'deny' | 'escalate'
     >
   > = {
     createWithRecommendation: jest.fn(),
     listPending: jest.fn(),
+    listHistory: jest.fn(),
     approve: jest.fn(),
     deny: jest.fn(),
     escalate: jest.fn(),
@@ -32,6 +50,8 @@ describe('AccessRequestsHitlController', () => {
           provide: HitlAccessRequestsService,
           useValue: mockHitlService,
         },
+        DemoAuthGuard,
+        Reflector,
       ],
     }).compile();
 
@@ -43,16 +63,26 @@ describe('AccessRequestsHitlController', () => {
     await app.close();
   });
 
+  it('rejects create without demo identity headers', async () => {
+    await request(app.getHttpServer())
+      .post('/access-requests')
+      .send({ targetEntitlement: 'prod-postgres-admin', justification: 'Need access' })
+      .expect(401);
+
+    expect(mockHitlService.createWithRecommendation).not.toHaveBeenCalled();
+  });
+
   it('rejects create payloads with empty justification', async () => {
     await request(app.getHttpServer())
       .post('/access-requests')
+      .set(userHeaders)
       .send({ targetEntitlement: 'prod-postgres-admin', justification: '' })
       .expect(400);
 
     expect(mockHitlService.createWithRecommendation).not.toHaveBeenCalled();
   });
 
-  it('creates a request and returns the pending DTO', async () => {
+  it('creates a request as a user and returns the pending DTO', async () => {
     mockHitlService.createWithRecommendation.mockResolvedValue({
       requestId: 'req-1',
       employeeId: 'E-MOCK-042',
@@ -69,6 +99,7 @@ describe('AccessRequestsHitlController', () => {
 
     const response = await request(app.getHttpServer())
       .post('/access-requests')
+      .set(userHeaders)
       .send({
         targetEntitlement: 'prod-postgres-admin',
         justification: 'Incident response',
@@ -76,10 +107,30 @@ describe('AccessRequestsHitlController', () => {
       .expect(201);
 
     expect(response.body.requestId).toBe('req-1');
-    expect(response.body.recommendation.decision).toBe('DENY');
+    expect(mockHitlService.createWithRecommendation).toHaveBeenCalledWith(
+      {
+        targetEntitlement: 'prod-postgres-admin',
+        justification: 'Incident response',
+      },
+      DEMO_PRINCIPALS.user,
+    );
   });
 
-  it('escalates via POST /access-requests/:id/escalate', async () => {
+  it('forbids users from listing pending requests', async () => {
+    await request(app.getHttpServer()).get('/access-requests/pending').set(userHeaders).expect(403);
+    expect(mockHitlService.listPending).not.toHaveBeenCalled();
+  });
+
+  it('forbids users from escalating requests', async () => {
+    await request(app.getHttpServer())
+      .post('/access-requests/req-1/escalate')
+      .set(userHeaders)
+      .expect(403);
+
+    expect(mockHitlService.escalate).not.toHaveBeenCalled();
+  });
+
+  it('escalates via POST /access-requests/:id/escalate as admin', async () => {
     mockHitlService.escalate.mockResolvedValue({
       requestId: 'req-1',
       status: 'escalated',
@@ -87,10 +138,21 @@ describe('AccessRequestsHitlController', () => {
 
     const response = await request(app.getHttpServer())
       .post('/access-requests/req-1/escalate')
-      .send({ admin_id: 'admin-123' })
+      .set(adminHeaders)
       .expect(200);
 
     expect(response.body).toEqual({ requestId: 'req-1', status: 'escalated' });
-    expect(mockHitlService.escalate).toHaveBeenCalledWith('req-1', 'admin-123');
+    expect(mockHitlService.escalate).toHaveBeenCalledWith('req-1', DEMO_PRINCIPALS.admin);
+  });
+
+  it('lists history for admin', async () => {
+    mockHitlService.listHistory.mockResolvedValue([]);
+
+    await request(app.getHttpServer())
+      .get('/access-requests/history')
+      .set(adminHeaders)
+      .expect(200);
+
+    expect(mockHitlService.listHistory).toHaveBeenCalled();
   });
 });

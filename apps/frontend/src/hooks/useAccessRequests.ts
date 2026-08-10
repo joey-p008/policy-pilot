@@ -6,13 +6,18 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  ACCESS_REQUESTS_HISTORY_QUERY_KEY,
   ACCESS_REQUESTS_PENDING_QUERY_KEY,
+} from '../api/access-request-keys';
+import {
   approveAccessRequest,
   createAccessRequest,
   denyAccessRequest,
   escalateAccessRequest,
+  fetchAccessRequestHistory,
   fetchPendingAccessRequests,
 } from '../api/access-requests';
+import { useDemoRole } from '../context/DemoRoleContext';
 
 type DecisionMutationContext = {
   previousPending: PendingAccessRequest[] | undefined;
@@ -56,29 +61,48 @@ function useDecisionMutation(
       }
     },
     onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_HISTORY_QUERY_KEY }),
+      ]);
     },
   });
 }
 
 export function usePendingRequests() {
+  const { isAdmin } = useDemoRole();
+
   return useQuery({
     queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY,
     queryFn: fetchPendingAccessRequests,
+    enabled: isAdmin,
+  });
+}
+
+export function useRequestHistory() {
+  const { isAdmin } = useDemoRole();
+
+  return useQuery({
+    queryKey: ACCESS_REQUESTS_HISTORY_QUERY_KEY,
+    queryFn: fetchAccessRequestHistory,
+    enabled: isAdmin,
   });
 }
 
 export function useSubmitAccessRequest() {
   const queryClient = useQueryClient();
+  const { isAdmin } = useDemoRole();
 
   return useMutation({
     mutationFn: (payload: CreateAccessRequestPayload) => createAccessRequest(payload),
     onSuccess: async (created) => {
-      queryClient.setQueryData<PendingAccessRequest[]>(
-        ACCESS_REQUESTS_PENDING_QUERY_KEY,
-        (current) => [created, ...(current ?? [])],
-      );
-      await queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
+      if (isAdmin) {
+        queryClient.setQueryData<PendingAccessRequest[]>(
+          ACCESS_REQUESTS_PENDING_QUERY_KEY,
+          (current) => [created, ...(current ?? [])],
+        );
+        await queryClient.invalidateQueries({ queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY });
+      }
     },
   });
 }
