@@ -21,7 +21,13 @@ export interface AccessRecommendation {
   confidenceScore: number;
 }
 
+export interface CreateAccessRequestPayload {
+  targetEntitlement: string;
+  justification: string;
+}
+
 export interface PendingAccessRequest extends BaseAccessRequest {
+  justification: string;
   currentEntitlements: string[];
   recommendation: AccessRecommendation;
 }
@@ -33,5 +39,5 @@ export interface AccessRequestDecisionPayload {
 
 export interface AccessRequestDecisionResult {
   requestId: string;
-  status: 'approved' | 'denied';
+  status: 'approved' | 'denied' | 'escalated';
 }

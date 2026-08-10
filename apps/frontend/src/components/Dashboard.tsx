@@ -1,8 +1,14 @@
 import type { PendingAccessRequest, PolicyCitation } from '@policy-pilot/shared-types';
-import { useState, type JSX } from 'react';
+import { useState, type FormEvent, type JSX } from 'react';
 
 import { MOCK_HITL_ADMIN_ID } from '../api/hitl-constants';
-import { useApproveRequest, useDenyRequest, usePendingRequests } from '../hooks/useAccessRequests';
+import {
+  useApproveRequest,
+  useDenyRequest,
+  useEscalateRequest,
+  usePendingRequests,
+  useSubmitAccessRequest,
+} from '../hooks/useAccessRequests';
 import { ConfidenceGauge } from './ConfidenceGauge';
 import { DecisionBadge } from './DecisionBadge';
 import { PolicyCitationModal } from './PolicyCitationModal';
@@ -16,6 +22,100 @@ function buildDecisionPayload(requestId: string) {
     requestId,
     admin_id: MOCK_HITL_ADMIN_ID,
   };
+}
+
+function RequestSubmitForm({
+  isSubmitting,
+  errorMessage,
+  onSubmit,
+}: {
+  isSubmitting: boolean;
+  errorMessage: string | null;
+  onSubmit: (payload: { targetEntitlement: string; justification: string }) => void;
+}): JSX.Element {
+  const [targetEntitlement, setTargetEntitlement] = useState('');
+  const [justification, setJustification] = useState('');
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    const trimmedEntitlement = targetEntitlement.trim();
+    const trimmedJustification = justification.trim();
+    if (trimmedEntitlement.length === 0 || trimmedJustification.length === 0) {
+      return;
+    }
+    onSubmit({
+      targetEntitlement: trimmedEntitlement,
+      justification: trimmedJustification,
+    });
+  };
+
+  return (
+    <form
+      className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-5"
+      onSubmit={handleSubmit}
+    >
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold text-slate-100">Submit access request</h2>
+        <p className="text-sm text-slate-400">
+          The agent retrieves policy context and returns a structured recommendation for HITL
+          review.
+        </p>
+      </div>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Target entitlement
+        </span>
+        <input
+          type="text"
+          value={targetEntitlement}
+          onChange={(event) => {
+            setTargetEntitlement(event.target.value);
+          }}
+          disabled={isSubmitting}
+          placeholder="e.g. prod-postgres-admin"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
+        />
+      </label>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Business justification
+        </span>
+        <textarea
+          value={justification}
+          onChange={(event) => {
+            setJustification(event.target.value);
+          }}
+          disabled={isSubmitting}
+          rows={3}
+          placeholder="Explain why this access is needed…"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
+        />
+      </label>
+      {errorMessage !== null ? (
+        <p className="text-sm text-rose-300" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="submit"
+          disabled={
+            isSubmitting ||
+            targetEntitlement.trim().length === 0 ||
+            justification.trim().length === 0
+          }
+          className="rounded bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSubmitting ? 'Generating recommendation…' : 'Submit for recommendation'}
+        </button>
+        {isSubmitting ? (
+          <p className="text-sm text-slate-400" role="status" aria-live="polite">
+            Running retrieval and decision engine…
+          </p>
+        ) : null}
+      </div>
+    </form>
+  );
 }
 
 function EntitlementsExpander({ request }: { request: PendingAccessRequest }): JSX.Element {
@@ -44,6 +144,8 @@ function EntitlementsExpander({ request }: { request: PendingAccessRequest }): J
             Requested permission
           </h3>
           <p className="text-sm font-medium text-teal-300">{request.targetEntitlement}</p>
+          <p className="mt-2 text-xs uppercase tracking-wide text-slate-500">Justification</p>
+          <p className="text-sm text-slate-300">{request.justification}</p>
         </div>
       </div>
     </details>
@@ -55,14 +157,14 @@ function RequestCard({
   actionsDisabled,
   onApprove,
   onDeny,
-  onManualOverride,
+  onEscalate,
   onOpenCitation,
 }: {
   request: PendingAccessRequest;
   actionsDisabled: boolean;
   onApprove: (requestId: string) => void;
   onDeny: (requestId: string) => void;
-  onManualOverride: (request: PendingAccessRequest) => void;
+  onEscalate: (requestId: string) => void;
   onOpenCitation: (citation: PolicyCitation) => void;
 }): JSX.Element {
   return (
@@ -132,13 +234,13 @@ function RequestCard({
         </button>
         <button
           type="button"
-          className="rounded border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-amber-700/80 px-3 py-1.5 text-xs font-medium text-amber-200 hover:border-amber-500 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={actionsDisabled}
           onClick={() => {
-            onManualOverride(request);
+            onEscalate(request.requestId);
           }}
         >
-          Manual Override
+          Escalate
         </button>
       </div>
     </article>
@@ -147,21 +249,18 @@ function RequestCard({
 
 function PendingRequestsList({
   requests,
-  approvePending,
-  denyPending,
+  actionsDisabled,
   onApprove,
   onDeny,
-  onManualOverride,
+  onEscalate,
 }: {
   requests: PendingAccessRequest[];
-  approvePending: boolean;
-  denyPending: boolean;
+  actionsDisabled: boolean;
   onApprove: (requestId: string) => void;
   onDeny: (requestId: string) => void;
-  onManualOverride: (request: PendingAccessRequest) => void;
+  onEscalate: (requestId: string) => void;
 }): JSX.Element {
   const [activeCitation, setActiveCitation] = useState<PolicyCitation | null>(null);
-  const actionsDisabled = approvePending || denyPending;
 
   return (
     <>
@@ -173,7 +272,7 @@ function PendingRequestsList({
             actionsDisabled={actionsDisabled}
             onApprove={onApprove}
             onDeny={onDeny}
-            onManualOverride={onManualOverride}
+            onEscalate={onEscalate}
             onOpenCitation={setActiveCitation}
           />
         ))}
@@ -199,15 +298,26 @@ function mutationErrorMessage(error: unknown, fallback: string): string {
 
 export function Dashboard(): JSX.Element {
   const { data, isPending, isError, error, refetch, isSuccess } = usePendingRequests();
+  const submit = useSubmitAccessRequest();
   const approve = useApproveRequest();
   const deny = useDenyRequest();
+  const escalate = useEscalateRequest();
 
   const decisionError =
     approve.error !== null
       ? mutationErrorMessage(approve.error, 'Failed to approve access request.')
       : deny.error !== null
         ? mutationErrorMessage(deny.error, 'Failed to deny access request.')
-        : null;
+        : escalate.error !== null
+          ? mutationErrorMessage(escalate.error, 'Failed to escalate access request.')
+          : null;
+
+  const submitError =
+    submit.error !== null
+      ? mutationErrorMessage(submit.error, 'Failed to generate recommendation.')
+      : null;
+
+  const actionsDisabled = approve.isPending || deny.isPending || escalate.isPending;
 
   let body: JSX.Element;
 
@@ -235,7 +345,7 @@ export function Dashboard(): JSX.Element {
         </button>
       </div>
     );
-  } else if (isSuccess && data.length === 0) {
+  } else if (isSuccess && (data?.length ?? 0) === 0) {
     body = (
       <p className="text-slate-300" role="status">
         No pending access requests.
@@ -245,25 +355,21 @@ export function Dashboard(): JSX.Element {
     body = (
       <PendingRequestsList
         requests={data ?? []}
-        approvePending={approve.isPending}
-        denyPending={deny.isPending}
+        actionsDisabled={actionsDisabled}
         onApprove={(requestId) => {
           deny.reset();
+          escalate.reset();
           approve.mutate(buildDecisionPayload(requestId));
         }}
         onDeny={(requestId) => {
           approve.reset();
+          escalate.reset();
           deny.mutate(buildDecisionPayload(requestId));
         }}
-        onManualOverride={(request) => {
-          const payload = buildDecisionPayload(request.requestId);
-          if (request.recommendation.decision === 'APPROVE') {
-            approve.reset();
-            deny.mutate(payload);
-            return;
-          }
+        onEscalate={(requestId) => {
+          approve.reset();
           deny.reset();
-          approve.mutate(payload);
+          escalate.mutate(buildDecisionPayload(requestId));
         }}
       />
     );
@@ -275,10 +381,20 @@ export function Dashboard(): JSX.Element {
         <p className="text-sm font-medium uppercase tracking-[0.2em] text-teal-400">Policy-Pilot</p>
         <h1 className="text-3xl font-semibold tracking-tight">HITL Dashboard</h1>
         <p className="text-slate-300">
-          Review AI recommendations, policy citations, and current entitlements before approving or
-          denying access.
+          Submit an access request for a live agent recommendation, then approve, deny, or escalate.
         </p>
       </header>
+      <RequestSubmitForm
+        isSubmitting={submit.isPending}
+        errorMessage={submitError}
+        onSubmit={(payload) => {
+          submit.mutate(payload, {
+            onSuccess: () => {
+              submit.reset();
+            },
+          });
+        }}
+      />
       {decisionError !== null ? (
         <div className="space-y-3 rounded-lg border border-rose-900/60 bg-rose-950/40 px-4 py-4">
           <p className="text-rose-200" role="alert">
@@ -290,6 +406,7 @@ export function Dashboard(): JSX.Element {
             onClick={() => {
               approve.reset();
               deny.reset();
+              escalate.reset();
             }}
           >
             Dismiss

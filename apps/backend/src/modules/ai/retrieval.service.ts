@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { z } from 'zod';
 
-import { AccessRequestDto, accessRequestSchema } from '../access-requests/dto/access-requests.dto';
 import {
   PolicyChunkRepository,
   PolicyChunkSimilarityRow,
@@ -11,6 +11,14 @@ import type { EmbeddingClient } from './embedding/embedding.types';
 
 export const RETRIEVAL_TOP_K = 4;
 
+const retrievalRequestSchema = z.object({
+  requestId: z.string().min(1),
+  targetEntitlement: z.string().min(1),
+  justification: z.string().min(1).optional(),
+});
+
+export type RetrievalRequest = z.infer<typeof retrievalRequestSchema>;
+
 @Injectable()
 export class RetrievalService {
   public constructor(
@@ -18,9 +26,12 @@ export class RetrievalService {
     private readonly policyChunkRepository: PolicyChunkRepository,
   ) {}
 
-  public async retrieve(request: AccessRequestDto): Promise<PolicyDocumentChunk[]> {
-    const validatedRequest = accessRequestSchema.parse(request);
-    const queryText = this.buildQueryText(validatedRequest.targetEntitlement);
+  public async retrieve(request: RetrievalRequest): Promise<PolicyDocumentChunk[]> {
+    const validatedRequest = retrievalRequestSchema.parse(request);
+    const queryText = this.buildQueryText(
+      validatedRequest.targetEntitlement,
+      validatedRequest.justification,
+    );
     const embeddings = await this.embeddingClient.embedTexts([queryText]);
     const embedding = embeddings[0];
 
@@ -38,8 +49,11 @@ export class RetrievalService {
     return rows.map((row) => this.toPolicyDocumentChunk(row));
   }
 
-  private buildQueryText(targetEntitlement: string): string {
-    return `Access entitlement request: ${targetEntitlement}`;
+  private buildQueryText(targetEntitlement: string, justification?: string): string {
+    if (justification === undefined || justification.trim().length === 0) {
+      return `Access entitlement request: ${targetEntitlement}`;
+    }
+    return `Access entitlement request: ${targetEntitlement}. Business justification: ${justification}`;
   }
 
   private toPolicyDocumentChunk(row: PolicyChunkSimilarityRow): PolicyDocumentChunk {

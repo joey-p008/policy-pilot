@@ -10,6 +10,7 @@ import { Decision, DecisionSchema } from './schemas/recommendation.schema';
 const DecisionEngineRequestSchema = z.object({
   requestId: z.string().min(1),
   targetEntitlement: z.string().min(1),
+  justification: z.string().min(1),
 });
 
 const DecisionEngineInputSchema = z.object({
@@ -30,6 +31,7 @@ export class DecisionEngineService {
       access_request: {
         request_id: validated.request.requestId,
         target_entitlement: validated.request.targetEntitlement,
+        justification: validated.request.justification,
       },
       policy_chunks: validated.policyChunks,
     };
