@@ -2,6 +2,7 @@ import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common
 import { z } from 'zod';
 
 import { CHAT_CLIENT, type ChatClient } from './chat/chat.types';
+import { groundDecisionCitations } from './citation-grounding';
 import { PolicyDocumentChunkSchema } from './dto/document-ingestion.dto';
 import { executeWithObservability } from './observability/llm-observability.wrapper';
 import { ACCESS_DECISION_PROMPT_KEY } from './prompts/access-decision.prompt';
@@ -75,6 +76,6 @@ export class DecisionEngineService {
       throw new InternalServerErrorException('Internal server error');
     }
 
-    return result.data;
+    return groundDecisionCitations(result.data, validated.policyChunks);
   }
 }

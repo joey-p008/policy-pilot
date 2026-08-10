@@ -27,6 +27,7 @@ export {
 } from './dto/document-ingestion.dto';
 export { CHAT_CLIENT, type ChatClient, type ChatCompletionOptions } from './chat/chat.types';
 export { OpenAiChatClient } from './chat/openai-chat.client';
+export { groundDecisionCitations } from './citation-grounding';
 export { DecisionEngineService, type DecisionEngineInput } from './decision-engine.service';
 export {
   EMBEDDING_CLIENT,
