@@ -1,0 +1,217 @@
+[
+  {
+    "scenario_id": "TEST-01",
+    "category": "Baseline Entitlement Happy Path",
+    "description": "Standard read access request from aligned cost center CC-FIN-07 targeting DATA_WAREHOUSE.",
+    "webhook_input": {
+      "request_id": "req_2026_001",
+      "employee_id": "EMP-41092",
+      "cost_center": "CC-FIN-07",
+      "department": "Finance Analytics",
+      "target_resource": "DATA_WAREHOUSE / FIN_DATASET",
+      "requested_entitlement": "FIN_DATASET_READ",
+      "current_entitlements": []
+    },
+    "expected_retrieved_chunks": [
+      {
+        "document_id": "POL-2026-01-DGW",
+        "page_number": 1,
+        "section_title": "Clause 3.2 — Departmental Cost Center Registration & Baseline Read Privileges",
+        "excerpt": "Personnel explicitly assigned to cost center CC-FIN-07 (Finance Analytics) qualify for baseline read-only access (entitlement token: FIN_DATASET_READ) targeting production Finance analytics datasets located in the DATA_WAREHOUSE repository... provisioned following single-stage direct manager electronic sign-off."
+      }
+    ],
+    "expected_agent_output": {
+      "decision": "APPROVE",
+      "rationale": "Employee EMP-41092 is assigned to cost center CC-FIN-07 (Finance Analytics), which holds a baseline entitlement for 'FIN_DATASET_READ' targeting the DATA_WAREHOUSE repository under single-stage direct manager sign-off.",
+      "policy_citations": [
+        {
+          "document_id": "POL-2026-01-DGW",
+          "page_number": 1,
+          "section_title": "Clause 3.2 — Departmental Cost Center Registration & Baseline Read Privileges"
+        }
+      ],
+      "confidence_score": 0.99
+    }
+  },
+  {
+    "scenario_id": "TEST-02",
+    "category": "Separation of Duties (SoD) Conflict",
+    "description": "Requester holding dataset edit rights requests bulk billing export capability, violating SOX 404 anti-fraud rules.",
+    "webhook_input": {
+      "request_id": "req_2026_002",
+      "employee_id": "EMP-88102",
+      "cost_center": "CC-FIN-07",
+      "department": "Finance Analytics",
+      "target_resource": "DATA_WAREHOUSE / FIN_DATASET",
+      "requested_entitlement": "FIN_BILLING_EXPORT",
+      "current_entitlements": ["FIN_DATASET_EDIT"]
+    },
+    "expected_retrieved_chunks": [
+      {
+        "document_id": "POL-2026-01-DGW",
+        "page_number": 2,
+        "section_title": "Appendix B — Separation of Duties (SoD) & Anti-Fraud Conflict Rules",
+        "excerpt": "Any request that would result in an employee concurrently holding both FIN_DATASET_EDIT (Dataset Edit/Write capability) and FIN_BILLING_EXPORT (Bulk Billing Exfiltration capability) entitlements represents a critical SoD conflict violation. The automated decision engine must immediately evaluate such dual-entitlement requests as DENY."
+      }
+    ],
+    "expected_agent_output": {
+      "decision": "DENY",
+      "rationale": "The employee currently holds active 'FIN_DATASET_EDIT' permissions. Concurrently granting 'FIN_BILLING_EXPORT' creates an irreconcilable Separation of Duties (SoD) conflict under SOX 404 anti-fraud controls to prevent unauthorized billing exfiltration.",
+      "policy_citations": [
+        {
+          "document_id": "POL-2026-01-DGW",
+          "page_number": 2,
+          "section_title": "Appendix B — Separation of Duties (SoD) & Anti-Fraud Conflict Rules"
+        }
+      ],
+      "confidence_score": 1.0
+    }
+  },
+  {
+    "scenario_id": "TEST-03",
+    "category": "Elevated Privilege & Time-Boxing Requirement",
+    "description": "Production cloud deployment request requiring dual VP/Security sign-off and 180-day time-box clamping.",
+    "webhook_input": {
+      "request_id": "req_2026_003",
+      "employee_id": "EMP-10294",
+      "cost_center": "CC-ENG-01",
+      "department": "Core Engineering",
+      "target_resource": "CLOUD_INFRASTRUCTURE / PROD",
+      "requested_entitlement": "PROD_DEPLOYER",
+      "current_entitlements": ["DEV_CODE_COMMIT"]
+    },
+    "expected_retrieved_chunks": [
+      {
+        "document_id": "POL-2026-02-SEC",
+        "page_number": 1,
+        "section_title": "5.0 Production Deployment Pipelines, Elevated Approvals & Time-Boxing",
+        "excerpt": "Requesting PROD_DEPLOYER permissions requires mandatory dual written authorization sign-offs from both the Vice President of Engineering and the Lead Infrastructure Security Officer. Furthermore, all approved grants for PROD_DEPLOYER must be strictly time-boxed to a maximum period of 180 calendar days."
+      }
+    ],
+    "expected_agent_output": {
+      "decision": "ESCALATE",
+      "rationale": "The request for 'PROD_DEPLOYER' represents an elevated infrastructure privilege tier. While the user is in Core Engineering (CC-ENG-01), policy requires mandatory dual sign-off from both the VP of Engineering and Lead Infrastructure Security Officer, with a mandatory maximum lifespan of 180 calendar days.",
+      "policy_citations": [
+        {
+          "document_id": "POL-2026-02-SEC",
+          "page_number": 1,
+          "section_title": "5.0 Production Deployment Pipelines, Elevated Approvals & Time-Boxing"
+        }
+      ],
+      "confidence_score": 0.96
+    }
+  },
+  {
+    "scenario_id": "TEST-04",
+    "category": "Separation of Duties (SoD) Conflict",
+    "description": "Code approver requesting direct production deployer permissions, creating an unreviewed code deployment risk.",
+    "webhook_input": {
+      "request_id": "req_2026_004",
+      "employee_id": "EMP-55109",
+      "cost_center": "CC-ENG-01",
+      "department": "Core Engineering",
+      "target_resource": "CLOUD_INFRASTRUCTURE / PROD",
+      "requested_entitlement": "PROD_DEPLOYER",
+      "current_entitlements": ["DEV_CODE_APPROVER"]
+    },
+    "expected_retrieved_chunks": [
+      {
+        "document_id": "POL-2026-02-SEC",
+        "page_number": 2,
+        "section_title": "Section 8.1 — Separation of Duties (SoD) Conflict Directive",
+        "excerpt": "Any request attempting to grant PROD_DEPLOYER permissions to an individual who currently holds active DEV_CODE_APPROVER (unrestricted repository merge rights) represents an irreconcilable Separation of Duties violation. The automated evaluation engine must immediately return a decision of DENY."
+      }
+    ],
+    "expected_agent_output": {
+      "decision": "DENY",
+      "rationale": "The requester currently holds active 'DEV_CODE_APPROVER' permissions. Concurrently granting 'PROD_DEPLOYER' violates Separation of Duties (SoD) rules designed to prevent unreviewed source code or unauthorized binaries from being pushed directly to production environments.",
+      "policy_citations": [
+        {
+          "document_id": "POL-2026-02-SEC",
+          "page_number": 2,
+          "section_title": "Section 8.1 — Separation of Duties (SoD) Conflict Directive"
+        }
+      ],
+      "confidence_score": 1.0
+    }
+  },
+  {
+    "scenario_id": "TEST-05",
+    "category": "Baseline Commercial Opportunity Edit",
+    "description": "Sales representative requesting lead edit access on the CRM system.",
+    "webhook_input": {
+      "request_id": "req_2026_005",
+      "employee_id": "EMP-33104",
+      "cost_center": "CC-SALES-03",
+      "department": "Enterprise Sales",
+      "target_resource": "CRM_SYSTEM",
+      "requested_entitlement": "CRM_LEAD_EDIT",
+      "current_entitlements": []
+    },
+    "expected_retrieved_chunks": [
+      {
+        "document_id": "POL-2026-03-CRM",
+        "page_number": 1,
+        "section_title": "3.0 Commercial Baseline Entitlements by Department",
+        "excerpt": "Account executives and sales representatives registered under cost center CC-SALES-03 (Enterprise Sales) qualify for baseline opportunity edit permissions (entitlement token: CRM_LEAD_EDIT) within CRM_SYSTEM."
+      }
+    ],
+    "expected_agent_output": {
+      "decision": "APPROVE",
+      "rationale": "Employee EMP-33104 belongs to cost center CC-SALES-03 (Enterprise Sales), which qualifies for baseline 'CRM_LEAD_EDIT' permissions within the CRM_SYSTEM platform.",
+      "policy_citations": [
+        {
+          "document_id": "POL-2026-03-CRM",
+          "page_number": 1,
+          "section_title": "3.0 Commercial Baseline Entitlements by Department"
+        }
+      ],
+      "confidence_score": 0.98
+    }
+  },
+  {
+    "scenario_id": "TEST-06",
+    "category": "Non-Commercial Cross-Department Escalation",
+    "description": "Core engineering requesting bulk customer data export on CRM system, triggering DPO review escalation.",
+    "webhook_input": {
+      "request_id": "req_2026_006",
+      "employee_id": "EMP-99210",
+      "cost_center": "CC-ENG-01",
+      "department": "Core Engineering",
+      "target_resource": "CRM_SYSTEM / EXPORT",
+      "requested_entitlement": "CRM_EXPORT_BULK",
+      "current_entitlements": []
+    },
+    "expected_retrieved_chunks": [
+      {
+        "document_id": "POL-2026-03-CRM",
+        "page_number": 1,
+        "section_title": "4.0 Non-Commercial Department Access Routing & Escalations",
+        "excerpt": "Requests seeking CRM customer data access or export capabilities that originate from non-commercial cost centers—specifically including Core Engineering under CC-ENG-01 or Finance Analytics under CC-FIN-07—do not qualify for baseline auto-approval... must be categorized as ESCALATE by the policy evaluation engine."
+      },
+      {
+        "document_id": "POL-2026-03-CRM",
+        "page_number": 1,
+        "section_title": "5.0 Bulk Data Export Restrictions, DPO Approval & Time-Boxing Rules",
+        "excerpt": "Any request seeking permission to execute bulk exports of customer records exceeding 1,000 entries (entitlement token: CRM_EXPORT_BULK) requires explicit, secondary sign-off from the corporate Data Protection Officer (DPO)... strictly time-boxed to a maximum lifespan."
+      }
+    ],
+    "expected_agent_output": {
+      "decision": "ESCALATE",
+      "rationale": "The request originates from a non-commercial cost center (CC-ENG-01) requesting bulk customer data export ('CRM_EXPORT_BULK'). Policy mandates this cannot be auto-approved and requires secondary sign-off from the Data Protection Officer (DPO) and strict time-boxing.",
+      "policy_citations": [
+        {
+          "document_id": "POL-2026-03-CRM",
+          "page_number": 1,
+          "section_title": "4.0 Non-Commercial Department Access Routing & Escalations"
+        },
+        {
+          "document_id": "POL-2026-03-CRM",
+          "page_number": 1,
+          "section_title": "5.0 Bulk Data Export Restrictions, DPO Approval & Time-Boxing Rules"
+        }
+      ],
+      "confidence_score": 0.99
+    }
+  }
+]
