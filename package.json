@@ -18,6 +18,7 @@
     "test:integration": "jest --config jest.integration.config.js --runInBand",
     "build": "npm run build --workspaces",
     "verify": "npm run format && npm run lint && npm run type-check && npm test",
+    "eval": "ts-node evals/run-evals.ts",
     "prepare": "husky"
   },
   "devDependencies": {
