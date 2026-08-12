@@ -70,6 +70,7 @@ export function RequestHistoryPage(): JSX.Element {
             <AccessRequestCard
               request={request}
               historyStatus={request.status}
+              provisioningStatus={request.provisioningStatus}
               actionsDisabled={actionsDisabled}
               onApprove={(requestId) => {
                 deny.reset();

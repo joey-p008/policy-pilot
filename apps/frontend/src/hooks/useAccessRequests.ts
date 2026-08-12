@@ -1,5 +1,6 @@
 import type {
   AccessRequestDecisionPayload,
+  AccessRequestHistoryItem,
   CreateAccessRequestPayload,
   PendingAccessRequest,
 } from '@policy-pilot/shared-types';
@@ -79,6 +80,19 @@ export function usePendingRequests() {
   });
 }
 
+/**
+ * Grants execute asynchronously behind a rate-limited queue, so a freshly
+ * approved request stays QUEUED until the downstream has capacity. Poll only
+ * while at least one grant is still outstanding, then fall idle.
+ */
+export const PROVISIONING_POLL_INTERVAL_MS = 3_000;
+
+export function hasOutstandingProvisioning(
+  history: AccessRequestHistoryItem[] | undefined,
+): boolean {
+  return (history ?? []).some((request) => request.provisioningStatus === 'QUEUED');
+}
+
 export function useRequestHistory() {
   const { isAdmin } = useDemoRole();
 
@@ -86,6 +100,8 @@ export function useRequestHistory() {
     queryKey: ACCESS_REQUESTS_HISTORY_QUERY_KEY,
     queryFn: fetchAccessRequestHistory,
     enabled: isAdmin,
+    refetchInterval: (query) =>
+      hasOutstandingProvisioning(query.state.data) ? PROVISIONING_POLL_INTERVAL_MS : false,
   });
 }
 

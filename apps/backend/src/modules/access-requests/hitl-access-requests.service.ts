@@ -6,6 +6,7 @@ import type {
   AccessRequestDecisionResult,
   AccessRequestHistoryItem,
   AccessRequestHistoryStatus,
+  AccessRequestProvisioningStatus,
   PendingAccessRequest,
   PolicyCitation,
 } from '@policy-pilot/shared-types';
@@ -17,10 +18,13 @@ import type { DemoPrincipal } from '../auth/demo-auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
   AccessRequestRepository,
+  PROVISIONING_STATUS,
   type AccessRequestStatus,
+  type ProvisioningStatus,
 } from '../database/repositories/access-request.repository';
 import { EntitlementRepository } from '../database/repositories/entitlement.repository';
 import { UserRepository } from '../database/repositories/user.repository';
+import { AccessGrantQueueService } from './access-grant-queue.service';
 import { AccessRecommendationService } from './access-recommendation.service';
 import type { CreateHitlAccessRequestDto } from './dto/hitl-access-requests.dto';
 import { EntitlementExecutionService } from './entitlement-execution.service';
@@ -78,6 +82,18 @@ function toResultStatus(status: AccessRequestStatus): AccessRequestDecisionResul
   throw new Error(`Unexpected decision status: ${status}`);
 }
 
+function toProvisioningStatus(status: string): AccessRequestProvisioningStatus {
+  if (
+    status === PROVISIONING_STATUS.QUEUED ||
+    status === PROVISIONING_STATUS.PROVISIONED ||
+    status === PROVISIONING_STATUS.FAILED ||
+    status === PROVISIONING_STATUS.NOT_APPLICABLE
+  ) {
+    return status;
+  }
+  throw new Error(`Unexpected provisioning status: ${status}`);
+}
+
 @Injectable()
 export class HitlAccessRequestsService {
   public constructor(
@@ -86,6 +102,7 @@ export class HitlAccessRequestsService {
     private readonly userRepository: UserRepository,
     private readonly accessRecommendationService: AccessRecommendationService,
     private readonly entitlementExecutionService: EntitlementExecutionService,
+    private readonly accessGrantQueueService: AccessGrantQueueService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
@@ -145,6 +162,7 @@ export class HitlAccessRequestsService {
       currentEntitlements: entitlementsByEmployeeId.get(row.employeeId) ?? [],
       recommendation: parseStoredRecommendation(row.recommendationJson),
       status: toHistoryStatus(row.status),
+      provisioningStatus: toProvisioningStatus(row.provisioningStatus),
       decidedAt: (row.decidedAt ?? row.createdAt).toISOString(),
       decidedByAdminId: row.decidedByAdminId,
     }));
@@ -205,15 +223,26 @@ export class HitlAccessRequestsService {
       targetEntitlement: existing.targetEntitlement,
     };
 
-    if (status === ACCESS_REQUEST_STATUS.APPROVED) {
-      await this.entitlementExecutionService.grant(executionInput);
-    } else if (existing.status === ACCESS_REQUEST_STATUS.APPROVED) {
+    if (
+      status !== ACCESS_REQUEST_STATUS.APPROVED &&
+      existing.status === ACCESS_REQUEST_STATUS.APPROVED
+    ) {
+      // Withdraw the grant before reversing the decision, so a job still
+      // waiting on downstream capacity cannot provision access the admin has
+      // just taken away. Anything already executed is undone by the revoke.
+      await this.accessGrantQueueService.cancelQueuedGrant(requestId);
       await this.entitlementExecutionService.revoke(executionInput);
     }
+
+    const provisioningStatus: ProvisioningStatus =
+      status === ACCESS_REQUEST_STATUS.APPROVED
+        ? PROVISIONING_STATUS.QUEUED
+        : PROVISIONING_STATUS.NOT_APPLICABLE;
 
     await this.accessRequestRepository.markDecided({
       requestId,
       status,
+      provisioningStatus,
       decidedByAdminId: principal.actorId,
     });
 
@@ -222,12 +251,19 @@ export class HitlAccessRequestsService {
       actorId: principal.userId,
       action: auditAction,
       previousState: { status: existing.status },
-      newState: { status, actor_id: principal.actorId },
+      newState: { status, actor_id: principal.actorId, provisioning_status: provisioningStatus },
     });
+
+    // Enqueued last, so the worker can never observe a request that is not yet
+    // recorded as APPROVED and QUEUED in Postgres.
+    if (status === ACCESS_REQUEST_STATUS.APPROVED) {
+      await this.accessGrantQueueService.enqueueGrant(executionInput);
+    }
 
     return {
       requestId,
       status: toResultStatus(status),
+      provisioningStatus,
     };
   }
 

@@ -16,6 +16,7 @@ import {
   DEMO_ROLE_HEADER,
 } from '../src/modules/auth/demo-auth.constants';
 import {
+  ACCESS_GRANT_QUEUE,
   ACCESS_REQUEST_JOB_NAME,
   ACCESS_REQUEST_QUEUE,
   ACCESS_REQUEST_WORKER_ENDPOINT,
@@ -23,6 +24,7 @@ import {
   buildWorkerIdempotencyRequestId,
 } from '../src/modules/access-requests/access-requests.constants';
 import { AccessRequestDto } from '../src/modules/access-requests/dto/access-requests.dto';
+import type { EntitlementExecutionInput } from '../src/modules/access-requests/dto/entitlement-execution.dto';
 import { EntitlementExecutionService } from '../src/modules/access-requests/entitlement-execution.service';
 import {
   SEED_HITL_ADMIN_USER_ID,
@@ -108,6 +110,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
   let app: INestApplication<App> | undefined;
   let prisma: PrismaService | undefined;
   let queue: Queue<AccessRequestDto> | undefined;
+  let grantQueue: Queue<EntitlementExecutionInput> | undefined;
   let scenario: Scenario;
 
   let downstreamSuccesses = 0;
@@ -167,6 +170,40 @@ describe('Access request webhook burst ingestion (integration)', () => {
       attemptsMade: job.attemptsMade,
       returnValue: job.returnvalue,
     };
+  }
+
+  /**
+   * Grants execute asynchronously behind the rate-limited grant queue, so the
+   * downstream effect of an approval is observed by polling Postgres rather
+   * than by inspecting the approve response.
+   */
+  async function waitForProvisioned(requestId: string): Promise<void> {
+    if (prisma === undefined) {
+      throw new Error('Prisma was not initialised');
+    }
+
+    const deadline = Date.now() + DRAIN_TIMEOUT_MS;
+
+    for (;;) {
+      const row = await prisma.accessRequest.findUnique({ where: { requestId } });
+
+      if (row?.provisioningStatus === 'PROVISIONED') {
+        return;
+      }
+
+      if (row?.provisioningStatus === 'FAILED') {
+        throw new Error(`Grant for ${requestId} was marked FAILED`);
+      }
+
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Grant for ${requestId} did not provision within ${DRAIN_TIMEOUT_MS}ms ` +
+            `(status ${row?.provisioningStatus ?? 'missing'})`,
+        );
+      }
+
+      await delay(DRAIN_POLL_INTERVAL_MS);
+    }
   }
 
   async function waitForDrain(
@@ -237,6 +274,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
     app = activeApp;
     prisma = activePrisma;
     queue = activeQueue;
+    grantQueue = activeApp.get<Queue<EntitlementExecutionInput>>(getQueueToken(ACCESS_GRANT_QUEUE));
 
     await activePrisma.idempotencyKey.deleteMany({ where: { requestId: { contains: runId } } });
     await activePrisma.accessAuditLog.deleteMany({ where: { requestId: { contains: runId } } });
@@ -346,6 +384,10 @@ describe('Access request webhook burst ingestion (integration)', () => {
 
       if (queue !== undefined) {
         await queue.obliterate({ force: true });
+      }
+
+      if (grantQueue !== undefined) {
+        await grantQueue.obliterate({ force: true });
       }
     } finally {
       if (app !== undefined) {
@@ -499,10 +541,15 @@ describe('Access request webhook burst ingestion (integration)', () => {
         .parse((created.body as { requestId?: unknown }).requestId);
       const downstreamBeforeApprove = downstreamSuccesses;
 
-      await request(app.getHttpServer())
+      const approveResponse = await request(app.getHttpServer())
         .post(`/access-requests/${requestId}/approve`)
         .set(adminHeaders)
         .expect(200);
+
+      // Approve only queues the grant; the rate-limited worker performs the
+      // downstream call, so the entitlement lands shortly afterwards.
+      expect(approveResponse.body).toMatchObject({ provisioningStatus: 'QUEUED' });
+      await waitForProvisioned(requestId);
 
       expect(downstreamSuccesses).toBe(downstreamBeforeApprove + 1);
 

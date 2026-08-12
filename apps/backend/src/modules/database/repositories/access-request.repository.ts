@@ -13,6 +13,20 @@ export const ACCESS_REQUEST_STATUS = {
 export type AccessRequestStatus =
   (typeof ACCESS_REQUEST_STATUS)[keyof typeof ACCESS_REQUEST_STATUS];
 
+/**
+ * Tracks the downstream side of an approval, which is executed asynchronously
+ * by the grant queue. A request can be APPROVED by a human long before the
+ * rate-limited downstream adapter has actually provisioned the entitlement.
+ */
+export const PROVISIONING_STATUS = {
+  NOT_APPLICABLE: 'NOT_APPLICABLE',
+  QUEUED: 'QUEUED',
+  PROVISIONED: 'PROVISIONED',
+  FAILED: 'FAILED',
+} as const;
+
+export type ProvisioningStatus = (typeof PROVISIONING_STATUS)[keyof typeof PROVISIONING_STATUS];
+
 export interface CreateAccessRequestRecordInput {
   id?: string;
   requestId: string;
@@ -30,8 +44,14 @@ export interface CreateAccessRequestRecordInput {
 export interface DecideAccessRequestInput {
   requestId: string;
   status: AccessRequestStatus;
+  provisioningStatus: ProvisioningStatus;
   decidedByAdminId: string;
   decidedAt?: Date;
+}
+
+export interface UpdateProvisioningStatusInput {
+  requestId: string;
+  provisioningStatus: ProvisioningStatus;
 }
 
 @Injectable()
@@ -89,9 +109,19 @@ export class AccessRequestRepository {
       where: { requestId: input.requestId },
       data: {
         status: input.status,
+        provisioningStatus: input.provisioningStatus,
         decidedByAdminId: input.decidedByAdminId,
         decidedAt: input.decidedAt ?? new Date(),
       },
+    });
+  }
+
+  public async updateProvisioningStatus(
+    input: UpdateProvisioningStatusInput,
+  ): Promise<AccessRequest> {
+    return this.prisma.accessRequest.update({
+      where: { requestId: input.requestId },
+      data: { provisioningStatus: input.provisioningStatus },
     });
   }
 }

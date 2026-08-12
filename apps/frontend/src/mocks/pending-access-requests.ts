@@ -2,6 +2,7 @@ import type {
   AccessRequestDecisionPayload,
   AccessRequestDecisionResult,
   AccessRequestHistoryItem,
+  AccessRequestProvisioningStatus,
   CreateAccessRequestPayload,
   PendingAccessRequest,
   RecommendationDecision,
@@ -103,6 +104,7 @@ export const MOCK_HISTORY_ACCESS_REQUESTS: AccessRequestHistoryItem[] = [
       ],
     },
     status: 'APPROVED',
+    provisioningStatus: 'PROVISIONED',
     decidedAt: '2026-07-15T14:30:00.000Z',
     decidedByAdminId: 'admin-123',
   },
@@ -210,6 +212,16 @@ function toHistoryStatus(
   return 'ESCALATED';
 }
 
+/**
+ * Mirrors the backend: an approval only queues the downstream grant, so the
+ * mock reports QUEUED rather than pretending the entitlement already landed.
+ */
+function toProvisioningStatus(
+  status: AccessRequestDecisionResult['status'],
+): AccessRequestProvisioningStatus {
+  return status === 'approved' ? 'QUEUED' : 'NOT_APPLICABLE';
+}
+
 export function resetMockPendingAccessRequests(): void {
   setMockPendingStore(clonePendingRequests(MOCK_PENDING_ACCESS_REQUESTS));
   setMockHistoryStore(cloneHistoryRequests(MOCK_HISTORY_ACCESS_REQUESTS));
@@ -262,6 +274,7 @@ export function applyMockDecision(
     const historyItem: AccessRequestHistoryItem = {
       ...pendingMatch,
       status: toHistoryStatus(status),
+      provisioningStatus: toProvisioningStatus(status),
       decidedAt: new Date().toISOString(),
       decidedByAdminId: identity.actorId,
     };
@@ -269,6 +282,7 @@ export function applyMockDecision(
     return {
       requestId: payload.requestId,
       status,
+      provisioningStatus: historyItem.provisioningStatus,
     };
   }
 
@@ -283,12 +297,15 @@ export function applyMockDecision(
     throw new Error(`Mock access request already has status ${nextStatus}`);
   }
 
+  const nextProvisioningStatus = toProvisioningStatus(status);
+
   setMockHistoryStore(
     historyStore.map((request) =>
       request.requestId === payload.requestId
         ? {
             ...request,
             status: nextStatus,
+            provisioningStatus: nextProvisioningStatus,
             decidedAt: new Date().toISOString(),
             decidedByAdminId: identity.actorId,
           }
@@ -299,5 +316,6 @@ export function applyMockDecision(
   return {
     requestId: payload.requestId,
     status,
+    provisioningStatus: nextProvisioningStatus,
   };
 }

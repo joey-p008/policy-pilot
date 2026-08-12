@@ -44,12 +44,16 @@ export class EntitlementExecutionService {
       requestId: buildGrantIdempotencyRequestId(validated.requestId),
       endpoint: ACCESS_GRANT_IDEMPOTENCY_ENDPOINT,
       execute: async (): Promise<EntitlementGrantResponse> => {
+        // Downstream first: a rate-limit rejection must leave no trace, or a
+        // retried job would find an entitlement already granted with no
+        // matching audit row.
+        await this.mockDownstream.invoke();
+
         await this.entitlementRepository.upsertByUserResourcePermission({
           userId: user.id,
           resourceName: validated.systemName,
           permissionLevel: validated.targetEntitlement,
         });
-        await this.mockDownstream.invoke();
 
         await this.auditLogService.append({
           requestId: validated.requestId,

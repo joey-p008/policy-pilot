@@ -2,7 +2,11 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
-import type { PendingAccessRequest } from '@policy-pilot/shared-types';
+import type {
+  AccessRequestHistoryItem,
+  AccessRequestProvisioningStatus,
+  PendingAccessRequest,
+} from '@policy-pilot/shared-types';
 import type { JSX, ReactNode } from 'react';
 
 import {
@@ -20,6 +24,8 @@ import {
 import { DemoRoleProvider } from '../context/DemoRoleContext';
 import { setDemoIdentity } from '../lib/demo-identity';
 import {
+  PROVISIONING_POLL_INTERVAL_MS,
+  hasOutstandingProvisioning,
   useApproveRequest,
   useDenyRequest,
   useEscalateRequest,
@@ -82,6 +88,18 @@ const pendingRequest: PendingAccessRequest = {
 const decisionPayload = {
   requestId: 'req-1',
 };
+
+function historyItem(
+  provisioningStatus: AccessRequestProvisioningStatus,
+): AccessRequestHistoryItem {
+  return {
+    ...pendingRequest,
+    status: 'APPROVED',
+    provisioningStatus,
+    decidedAt: '2026-08-01T12:00:00.000Z',
+    decidedByAdminId: 'admin-123',
+  };
+}
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -156,6 +174,46 @@ describe('useAccessRequests hooks', () => {
     expect(ACCESS_REQUESTS_HISTORY_QUERY_KEY).toEqual(['access-requests', 'history']);
   });
 
+  describe('provisioning poll gate', () => {
+    it('polls while a grant is still awaiting downstream capacity', () => {
+      expect(hasOutstandingProvisioning([historyItem('QUEUED')])).toBe(true);
+    });
+
+    it('stops polling once every grant has settled', () => {
+      expect(hasOutstandingProvisioning([historyItem('PROVISIONED'), historyItem('FAILED')])).toBe(
+        false,
+      );
+    });
+
+    it('stops polling for decisions that never reach a downstream adapter', () => {
+      expect(hasOutstandingProvisioning([historyItem('NOT_APPLICABLE')])).toBe(false);
+    });
+
+    it('does not poll before the first history payload arrives', () => {
+      expect(hasOutstandingProvisioning(undefined)).toBe(false);
+      expect(hasOutstandingProvisioning([])).toBe(false);
+    });
+  });
+
+  it('refetches history until a queued grant becomes provisioned', async () => {
+    mockedFetchAccessRequestHistory
+      .mockResolvedValueOnce([historyItem('QUEUED')])
+      .mockResolvedValue([historyItem('PROVISIONED')]);
+
+    const { result } = renderHook(() => useRequestHistory(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(
+      () => {
+        expect(result.current.data?.[0]?.provisioningStatus).toBe('PROVISIONED');
+      },
+      { timeout: PROVISIONING_POLL_INTERVAL_MS * 3 },
+    );
+
+    expect(mockedFetchAccessRequestHistory.mock.calls.length).toBeGreaterThan(1);
+  }, 20_000);
+
   it('submits a new request and prepends it to the pending cache for admin', async () => {
     mockedFetchPendingAccessRequests.mockResolvedValueOnce([]).mockResolvedValue([pendingRequest]);
     mockedCreateAccessRequest.mockResolvedValue(pendingRequest);
@@ -204,6 +262,7 @@ describe('useAccessRequests hooks', () => {
     mockedApproveAccessRequest.mockResolvedValue({
       requestId: 'req-1',
       status: 'approved',
+      provisioningStatus: 'QUEUED',
     });
 
     const { result } = renderHook(
@@ -236,6 +295,7 @@ describe('useAccessRequests hooks', () => {
     mockedDenyAccessRequest.mockResolvedValue({
       requestId: 'req-1',
       status: 'denied',
+      provisioningStatus: 'NOT_APPLICABLE',
     });
 
     const { result } = renderHook(
@@ -268,6 +328,7 @@ describe('useAccessRequests hooks', () => {
     mockedEscalateAccessRequest.mockResolvedValue({
       requestId: 'req-1',
       status: 'escalated',
+      provisioningStatus: 'NOT_APPLICABLE',
     });
 
     const { result } = renderHook(

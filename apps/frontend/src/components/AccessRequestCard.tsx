@@ -1,5 +1,6 @@
 import type {
   AccessRequestHistoryItem,
+  AccessRequestProvisioningStatus,
   PendingAccessRequest,
   PolicyCitation,
 } from '@policy-pilot/shared-types';
@@ -8,6 +9,7 @@ import { useState, type JSX } from 'react';
 import { ConfidenceGauge } from './ConfidenceGauge';
 import { DecisionBadge } from './DecisionBadge';
 import { PolicyCitationModal } from './PolicyCitationModal';
+import { ProvisioningBadge } from './ProvisioningBadge';
 import { RequestDecisionActions } from './RequestDecisionActions';
 
 function citationLabel(citation: PolicyCitation): string {
@@ -64,6 +66,7 @@ export function AccessRequestCard({
   request,
   actionsDisabled,
   historyStatus,
+  provisioningStatus,
   onApprove,
   onDeny,
   onEscalate,
@@ -71,6 +74,7 @@ export function AccessRequestCard({
   request: PendingAccessRequest | AccessRequestHistoryItem;
   actionsDisabled: boolean;
   historyStatus?: AccessRequestHistoryItem['status'];
+  provisioningStatus?: AccessRequestProvisioningStatus;
   onApprove: (requestId: string) => void;
   onDeny: (requestId: string) => void;
   onEscalate: (requestId: string) => void;
@@ -96,7 +100,12 @@ export function AccessRequestCard({
               </p>
             ) : null}
           </div>
-          <DecisionBadge decision={request.recommendation.decision} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {provisioningStatus !== undefined ? (
+              <ProvisioningBadge provisioningStatus={provisioningStatus} />
+            ) : null}
+            <DecisionBadge decision={request.recommendation.decision} />
+          </div>
         </div>
 
         <ConfidenceGauge score={request.recommendation.confidenceScore} />
