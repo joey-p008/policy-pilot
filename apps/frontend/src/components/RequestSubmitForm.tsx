@@ -1,5 +1,14 @@
 import { useState, type FormEvent, type JSX } from 'react';
 
+import {
+  ACCESS_REQUEST_ENTITLEMENT_KEYS,
+  ACCESS_REQUEST_SYSTEM_NAMES,
+  isAccessRequestCatalogMember,
+} from '../lib/access-request-options';
+
+const SELECT_CLASS_NAME =
+  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 focus:border-teal-500 focus:outline-none';
+
 export function RequestSubmitForm({
   isSubmitting,
   errorMessage,
@@ -17,21 +26,20 @@ export function RequestSubmitForm({
   const [entitlementKey, setEntitlementKey] = useState('');
   const [justification, setJustification] = useState('');
 
+  const trimmedJustification = justification.trim();
+  const canSubmitTicket =
+    isAccessRequestCatalogMember(systemName, ACCESS_REQUEST_SYSTEM_NAMES) &&
+    isAccessRequestCatalogMember(entitlementKey, ACCESS_REQUEST_ENTITLEMENT_KEYS) &&
+    trimmedJustification.length > 0;
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    const trimmedSystemName = systemName.trim();
-    const trimmedEntitlementKey = entitlementKey.trim();
-    const trimmedJustification = justification.trim();
-    if (
-      trimmedSystemName.length === 0 ||
-      trimmedEntitlementKey.length === 0 ||
-      trimmedJustification.length === 0
-    ) {
+    if (!canSubmitTicket) {
       return;
     }
     onSubmit({
-      systemName: trimmedSystemName,
-      entitlementKey: trimmedEntitlementKey,
+      systemName,
+      entitlementKey,
       justification: trimmedJustification,
     });
     setSystemName('');
@@ -39,11 +47,7 @@ export function RequestSubmitForm({
     setJustification('');
   };
 
-  const submitDisabled =
-    isSubmitting ||
-    systemName.trim().length === 0 ||
-    entitlementKey.trim().length === 0 ||
-    justification.trim().length === 0;
+  const submitDisabled = isSubmitting || !canSubmitTicket;
 
   return (
     <form
@@ -61,31 +65,41 @@ export function RequestSubmitForm({
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
           System name
         </span>
-        <input
-          type="text"
+        <select
           value={systemName}
           onChange={(event) => {
             setSystemName(event.target.value);
           }}
           disabled={isSubmitting}
-          placeholder="e.g. DATA_WAREHOUSE"
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
-        />
+          className={SELECT_CLASS_NAME}
+        >
+          <option value="">Select system name</option>
+          {ACCESS_REQUEST_SYSTEM_NAMES.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="block space-y-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
           Entitlement key
         </span>
-        <input
-          type="text"
+        <select
           value={entitlementKey}
           onChange={(event) => {
             setEntitlementKey(event.target.value);
           }}
           disabled={isSubmitting}
-          placeholder="e.g. FIN_DATASET_EDIT"
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
-        />
+          className={SELECT_CLASS_NAME}
+        >
+          <option value="">Select entitlement key</option>
+          {ACCESS_REQUEST_ENTITLEMENT_KEYS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="block space-y-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">

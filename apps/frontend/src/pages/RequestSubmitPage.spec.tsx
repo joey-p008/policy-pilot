@@ -46,7 +46,7 @@ describe('RequestSubmitPage', () => {
     jest.clearAllMocks();
     window.localStorage.clear();
     writeStoredRequesterProfile({
-      title: 'Data Analyst',
+      title: 'Senior Data Analyst',
       department: 'Finance Analytics',
       costCenter: 'CC-FIN-07',
     });
@@ -74,11 +74,11 @@ describe('RequestSubmitPage', () => {
 
     renderWithProviders(<RequestSubmitPage />);
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. DATA_WAREHOUSE'), {
+    fireEvent.change(screen.getByLabelText('System name'), {
       target: { value: 'DATA_WAREHOUSE' },
     });
-    fireEvent.change(screen.getByPlaceholderText('e.g. FIN_DATASET_EDIT'), {
-      target: { value: 'analytics-warehouse-writer' },
+    fireEvent.change(screen.getByLabelText('Entitlement key'), {
+      target: { value: 'FIN_DATASET_EDIT' },
     });
     fireEvent.change(screen.getByPlaceholderText('Explain why this access is needed…'), {
       target: { value: 'Quarterly reporting pipeline' },
@@ -86,11 +86,11 @@ describe('RequestSubmitPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit for recommendation' }));
 
     expect(submitMutate).toHaveBeenCalledWith({
-      title: 'Data Analyst',
+      title: 'Senior Data Analyst',
       department: 'Finance Analytics',
       costCenter: 'CC-FIN-07',
       systemName: 'DATA_WAREHOUSE',
-      entitlementKey: 'analytics-warehouse-writer',
+      entitlementKey: 'FIN_DATASET_EDIT',
       justification: 'Quarterly reporting pipeline',
     });
   });
