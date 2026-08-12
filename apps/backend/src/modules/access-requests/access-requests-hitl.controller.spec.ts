@@ -66,7 +66,14 @@ describe('AccessRequestsHitlController', () => {
   it('rejects create without demo identity headers', async () => {
     await request(app.getHttpServer())
       .post('/access-requests')
-      .send({ targetEntitlement: 'prod-postgres-admin', justification: 'Need access' })
+      .send({
+        title: 'Data Analyst',
+        department: 'Finance Analytics',
+        costCenter: 'CC-FIN-07',
+        systemName: 'DATA_WAREHOUSE',
+        entitlementKey: 'prod-postgres-admin',
+        justification: 'Need access',
+      })
       .expect(401);
 
     expect(mockHitlService.createWithRecommendation).not.toHaveBeenCalled();
@@ -76,7 +83,14 @@ describe('AccessRequestsHitlController', () => {
     await request(app.getHttpServer())
       .post('/access-requests')
       .set(userHeaders)
-      .send({ targetEntitlement: 'prod-postgres-admin', justification: '' })
+      .send({
+        title: 'Data Analyst',
+        department: 'Finance Analytics',
+        costCenter: 'CC-FIN-07',
+        systemName: 'DATA_WAREHOUSE',
+        entitlementKey: 'prod-postgres-admin',
+        justification: '',
+      })
       .expect(400);
 
     expect(mockHitlService.createWithRecommendation).not.toHaveBeenCalled();
@@ -86,6 +100,10 @@ describe('AccessRequestsHitlController', () => {
     mockHitlService.createWithRecommendation.mockResolvedValue({
       requestId: 'req-1',
       employeeId: 'E-MOCK-042',
+      title: 'Data Analyst',
+      department: 'Finance Analytics',
+      costCenter: 'CC-FIN-07',
+      systemName: 'DATA_WAREHOUSE',
       targetEntitlement: 'prod-postgres-admin',
       justification: 'Incident response',
       currentEntitlements: ['payroll-api:read'],
@@ -101,7 +119,11 @@ describe('AccessRequestsHitlController', () => {
       .post('/access-requests')
       .set(userHeaders)
       .send({
-        targetEntitlement: 'prod-postgres-admin',
+        title: 'Data Analyst',
+        department: 'Finance Analytics',
+        costCenter: 'CC-FIN-07',
+        systemName: 'DATA_WAREHOUSE',
+        entitlementKey: 'prod-postgres-admin',
         justification: 'Incident response',
       })
       .expect(201);
@@ -109,7 +131,11 @@ describe('AccessRequestsHitlController', () => {
     expect(response.body.requestId).toBe('req-1');
     expect(mockHitlService.createWithRecommendation).toHaveBeenCalledWith(
       {
-        targetEntitlement: 'prod-postgres-admin',
+        title: 'Data Analyst',
+        department: 'Finance Analytics',
+        costCenter: 'CC-FIN-07',
+        systemName: 'DATA_WAREHOUSE',
+        entitlementKey: 'prod-postgres-admin',
         justification: 'Incident response',
       },
       DEMO_PRINCIPALS.user,

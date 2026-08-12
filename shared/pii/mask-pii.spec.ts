@@ -14,6 +14,21 @@ function assertNoRawPiiEscapes(value: unknown): void {
 }
 
 describe('maskPII', () => {
+  it('masks camelCase employeeId and costCenter fields', () => {
+    const result = maskPII({
+      employeeId: RAW_EMPLOYEE_ID,
+      costCenter: RAW_COST_CENTER,
+      requestId: 'req-123',
+    });
+
+    expect(result).toEqual({
+      employeeId: 'E1***67',
+      costCenter: 'CC***01',
+      requestId: 'req-123',
+    });
+    assertNoRawPiiEscapes(result);
+  });
+
   it('masks known PII fields while preserving other values', () => {
     const result = maskPII({
       request_id: 'req-123',

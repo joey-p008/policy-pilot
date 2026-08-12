@@ -102,6 +102,7 @@ describe('RetrievalService', () => {
     await service.retrieve({
       requestId: 'req-789',
       targetEntitlement: 'FIN_BILLING_EXPORT',
+      title: 'Data Analyst',
       department: 'Finance Analytics',
       costCenter: 'CC-FIN-07',
       targetResource: 'DATA_WAREHOUSE / FIN_DATASET',
@@ -110,7 +111,7 @@ describe('RetrievalService', () => {
     });
 
     expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledWith([
-      'Access entitlement request: FIN_BILLING_EXPORT. Department: Finance Analytics. Cost center: CC-FIN-07. Target resource: DATA_WAREHOUSE / FIN_DATASET. Current entitlements: FIN_DATASET_EDIT. Business justification: Requester needs bulk billing export',
+      'Access entitlement request: FIN_BILLING_EXPORT. Requester title: Data Analyst. Department: Finance Analytics. Cost center: CC-FIN-07. Target resource: DATA_WAREHOUSE / FIN_DATASET. Current entitlements: FIN_DATASET_EDIT. Business justification: Requester needs bulk billing export',
     ]);
   });
 });

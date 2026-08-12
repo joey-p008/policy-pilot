@@ -16,10 +16,12 @@ function citationLabel(citation: PolicyCitation): string {
 
 function EntitlementsExpander({
   currentEntitlements,
+  systemName,
   targetEntitlement,
   justification,
 }: {
   currentEntitlements: string[];
+  systemName: string;
   targetEntitlement: string;
   justification: string;
 }): JSX.Element {
@@ -47,7 +49,9 @@ function EntitlementsExpander({
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
             Requested permission
           </h3>
-          <p className="text-sm font-medium text-teal-300">{targetEntitlement}</p>
+          <p className="text-sm font-medium text-teal-300">
+            {systemName} / {targetEntitlement}
+          </p>
           <p className="mt-2 text-xs uppercase tracking-wide text-slate-500">Justification</p>
           <p className="text-sm text-slate-300">{justification}</p>
         </div>
@@ -79,7 +83,13 @@ export function AccessRequestCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
             <p className="font-mono text-xs text-slate-400">{request.requestId}</p>
-            <h2 className="text-lg font-semibold text-slate-100">{request.targetEntitlement}</h2>
+            <h2 className="text-lg font-semibold text-slate-100">
+              {request.systemName} / {request.targetEntitlement}
+            </h2>
+            <p className="text-sm text-slate-400">
+              {request.title} · {request.department} ·{' '}
+              <span className="font-mono text-slate-300">{request.costCenter}</span>
+            </p>
             {historyStatus !== undefined ? (
               <p className="text-xs uppercase tracking-wide text-slate-400">
                 Status: <span className="font-semibold text-slate-200">{historyStatus}</span>
@@ -102,6 +112,7 @@ export function AccessRequestCard({
 
         <EntitlementsExpander
           currentEntitlements={request.currentEntitlements}
+          systemName={request.systemName}
           targetEntitlement={request.targetEntitlement}
           justification={request.justification}
         />

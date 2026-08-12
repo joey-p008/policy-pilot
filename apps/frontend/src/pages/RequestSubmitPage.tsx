@@ -2,11 +2,13 @@ import type { JSX } from 'react';
 
 import { RequestSubmitForm } from '../components/RequestSubmitForm';
 import { useDemoRole } from '../context/DemoRoleContext';
+import { useRequesterProfile } from '../context/RequesterProfileContext';
 import { useSubmitAccessRequest } from '../hooks/useAccessRequests';
 import { mutationErrorMessage } from '../lib/mutation-error';
 
 export function RequestSubmitPage(): JSX.Element {
   const { isAdmin } = useDemoRole();
+  const { profile } = useRequesterProfile();
   const submit = useSubmitAccessRequest();
 
   const submitError =
@@ -28,10 +30,16 @@ export function RequestSubmitPage(): JSX.Element {
         isSubmitting={submit.isPending}
         errorMessage={submitError}
         onSubmit={(payload) => {
-          submit.mutate(payload, {
-            onSuccess: () => {
-              submit.reset();
-            },
+          if (profile === null) {
+            return;
+          }
+          submit.mutate({
+            title: profile.title,
+            department: profile.department,
+            costCenter: profile.costCenter,
+            systemName: payload.systemName,
+            entitlementKey: payload.entitlementKey,
+            justification: payload.justification,
           });
         }}
       />

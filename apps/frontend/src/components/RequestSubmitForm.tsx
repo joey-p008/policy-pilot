@@ -7,25 +7,43 @@ export function RequestSubmitForm({
 }: {
   isSubmitting: boolean;
   errorMessage: string | null;
-  onSubmit: (payload: { targetEntitlement: string; justification: string }) => void;
+  onSubmit: (payload: {
+    systemName: string;
+    entitlementKey: string;
+    justification: string;
+  }) => void;
 }): JSX.Element {
-  const [targetEntitlement, setTargetEntitlement] = useState('');
+  const [systemName, setSystemName] = useState('');
+  const [entitlementKey, setEntitlementKey] = useState('');
   const [justification, setJustification] = useState('');
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    const trimmedEntitlement = targetEntitlement.trim();
+    const trimmedSystemName = systemName.trim();
+    const trimmedEntitlementKey = entitlementKey.trim();
     const trimmedJustification = justification.trim();
-    if (trimmedEntitlement.length === 0 || trimmedJustification.length === 0) {
+    if (
+      trimmedSystemName.length === 0 ||
+      trimmedEntitlementKey.length === 0 ||
+      trimmedJustification.length === 0
+    ) {
       return;
     }
     onSubmit({
-      targetEntitlement: trimmedEntitlement,
+      systemName: trimmedSystemName,
+      entitlementKey: trimmedEntitlementKey,
       justification: trimmedJustification,
     });
-    setTargetEntitlement('');
+    setSystemName('');
+    setEntitlementKey('');
     setJustification('');
   };
+
+  const submitDisabled =
+    isSubmitting ||
+    systemName.trim().length === 0 ||
+    entitlementKey.trim().length === 0 ||
+    justification.trim().length === 0;
 
   return (
     <form
@@ -35,22 +53,37 @@ export function RequestSubmitForm({
       <div className="space-y-1">
         <h2 className="text-lg font-semibold text-slate-100">Submit access request</h2>
         <p className="text-sm text-slate-400">
-          The agent retrieves policy context and returns a structured recommendation for HITL
-          review.
+          The agent retrieves policy context from your profile and ticket fields, then returns a
+          structured recommendation for HITL review.
         </p>
       </div>
       <label className="block space-y-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Target entitlement
+          System name
         </span>
         <input
           type="text"
-          value={targetEntitlement}
+          value={systemName}
           onChange={(event) => {
-            setTargetEntitlement(event.target.value);
+            setSystemName(event.target.value);
           }}
           disabled={isSubmitting}
-          placeholder="e.g. prod-postgres-admin"
+          placeholder="e.g. DATA_WAREHOUSE"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
+        />
+      </label>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Entitlement key
+        </span>
+        <input
+          type="text"
+          value={entitlementKey}
+          onChange={(event) => {
+            setEntitlementKey(event.target.value);
+          }}
+          disabled={isSubmitting}
+          placeholder="e.g. FIN_DATASET_EDIT"
           className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
         />
       </label>
@@ -77,11 +110,7 @@ export function RequestSubmitForm({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={
-            isSubmitting ||
-            targetEntitlement.trim().length === 0 ||
-            justification.trim().length === 0
-          }
+          disabled={submitDisabled}
           className="rounded bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? 'Generating recommendation…' : 'Submit for recommendation'}

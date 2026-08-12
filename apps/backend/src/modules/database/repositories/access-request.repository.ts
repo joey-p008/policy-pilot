@@ -17,6 +17,10 @@ export interface CreateAccessRequestRecordInput {
   id?: string;
   requestId: string;
   employeeId: string;
+  title: string;
+  department: string;
+  costCenter: string;
+  systemName: string;
   targetEntitlement: string;
   justification: string;
   status: AccessRequestStatus;
@@ -40,6 +44,10 @@ export class AccessRequestRepository {
         id: input.id,
         requestId: input.requestId,
         employeeId: input.employeeId,
+        title: input.title,
+        department: input.department,
+        costCenter: input.costCenter,
+        systemName: input.systemName,
         targetEntitlement: input.targetEntitlement,
         justification: input.justification,
         status: input.status,

@@ -70,6 +70,10 @@ model AccessRequest {
   id                  String    @id @default(uuid()) @db.Uuid
   requestId           String    @unique @map("request_id")
   employeeId          String    @map("employee_id")
+  title               String
+  department          String
+  costCenter          String    @map("cost_center")
+  systemName          String    @map("system_name")
   targetEntitlement   String    @map("target_entitlement")
   justification       String
   status              String

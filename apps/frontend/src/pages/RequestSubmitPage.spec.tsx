@@ -6,8 +6,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { JSX, ReactNode } from 'react';
 
 import { DemoRoleProvider } from '../context/DemoRoleContext';
+import { RequesterProfileProvider } from '../context/RequesterProfileContext';
 import { useSubmitAccessRequest } from '../hooks/useAccessRequests';
 import { setDemoIdentity } from '../lib/demo-identity';
+import { writeStoredRequesterProfile } from '../lib/requester-profile';
 import { RequestSubmitPage } from './RequestSubmitPage';
 
 jest.mock('../hooks/useAccessRequests', () => ({
@@ -29,7 +31,9 @@ function renderWithProviders(ui: JSX.Element): void {
   function Wrapper({ children }: { children: ReactNode }): JSX.Element {
     return (
       <QueryClientProvider client={queryClient}>
-        <DemoRoleProvider>{children}</DemoRoleProvider>
+        <RequesterProfileProvider>
+          <DemoRoleProvider>{children}</DemoRoleProvider>
+        </RequesterProfileProvider>
       </QueryClientProvider>
     );
   }
@@ -40,6 +44,12 @@ function renderWithProviders(ui: JSX.Element): void {
 describe('RequestSubmitPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.localStorage.clear();
+    writeStoredRequesterProfile({
+      title: 'Data Analyst',
+      department: 'Finance Analytics',
+      costCenter: 'CC-FIN-07',
+    });
     setDemoIdentity('user');
     mockedUseSubmitAccessRequest.mockReturnValue({
       mutate: jest.fn(),
@@ -51,7 +61,7 @@ describe('RequestSubmitPage', () => {
     } as ReturnType<typeof useSubmitAccessRequest>);
   });
 
-  it('submits entitlement and justification through the create mutation', () => {
+  it('submits profile and ticket fields through the create mutation', () => {
     const submitMutate = jest.fn();
     mockedUseSubmitAccessRequest.mockReturnValue({
       mutate: submitMutate,
@@ -64,7 +74,10 @@ describe('RequestSubmitPage', () => {
 
     renderWithProviders(<RequestSubmitPage />);
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. prod-postgres-admin'), {
+    fireEvent.change(screen.getByPlaceholderText('e.g. DATA_WAREHOUSE'), {
+      target: { value: 'DATA_WAREHOUSE' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('e.g. FIN_DATASET_EDIT'), {
       target: { value: 'analytics-warehouse-writer' },
     });
     fireEvent.change(screen.getByPlaceholderText('Explain why this access is needed…'), {
@@ -72,12 +85,13 @@ describe('RequestSubmitPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Submit for recommendation' }));
 
-    expect(submitMutate).toHaveBeenCalledWith(
-      {
-        targetEntitlement: 'analytics-warehouse-writer',
-        justification: 'Quarterly reporting pipeline',
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
+    expect(submitMutate).toHaveBeenCalledWith({
+      title: 'Data Analyst',
+      department: 'Finance Analytics',
+      costCenter: 'CC-FIN-07',
+      systemName: 'DATA_WAREHOUSE',
+      entitlementKey: 'analytics-warehouse-writer',
+      justification: 'Quarterly reporting pipeline',
+    });
   });
 });

@@ -57,6 +57,10 @@ const mockedEscalateAccessRequest = escalateAccessRequest as jest.MockedFunction
 const pendingRequest: PendingAccessRequest = {
   requestId: 'req-1',
   employeeId: 'emp-hashed',
+  title: 'Data Analyst',
+  department: 'Finance Analytics',
+  costCenter: 'CC-FIN-07',
+  systemName: 'DATA_WAREHOUSE',
   targetEntitlement: 'prod-postgres-admin',
   justification: 'Need admin for deploy',
   currentEntitlements: ['prod-postgres-read'],
@@ -169,7 +173,11 @@ describe('useAccessRequests hooks', () => {
     });
 
     result.current.submit.mutate({
-      targetEntitlement: 'prod-postgres-admin',
+      title: 'Data Analyst',
+      department: 'Finance Analytics',
+      costCenter: 'CC-FIN-07',
+      systemName: 'DATA_WAREHOUSE',
+      entitlementKey: 'prod-postgres-admin',
       justification: 'Need admin for deploy',
     });
 
@@ -179,7 +187,11 @@ describe('useAccessRequests hooks', () => {
     });
 
     expect(mockedCreateAccessRequest).toHaveBeenCalledWith({
-      targetEntitlement: 'prod-postgres-admin',
+      title: 'Data Analyst',
+      department: 'Finance Analytics',
+      costCenter: 'CC-FIN-07',
+      systemName: 'DATA_WAREHOUSE',
+      entitlementKey: 'prod-postgres-admin',
       justification: 'Need admin for deploy',
     });
   });

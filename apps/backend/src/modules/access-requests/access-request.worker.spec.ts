@@ -6,6 +6,7 @@ import {
   cumulativeBackoffMs,
 } from '../../config/rate-limit.config';
 import { IdempotencyService, IdempotentResult } from '../idempotency/idempotency.service';
+import { AccessRecommendationService } from './access-recommendation.service';
 import { AccessRequestProcessedResponse, AccessRequestWorker } from './access-request.worker';
 import {
   ACCESS_REQUEST_BACKOFF_BASE_DELAY_MS,
@@ -20,6 +21,7 @@ import { AccessRequestDto } from './dto/access-requests.dto';
 import { MockDownstreamRateLimitError, MockDownstreamService } from './mock-downstream.service';
 
 describe('AccessRequestWorker', () => {
+  const createFromWebhook = jest.fn();
   const executeIdempotent = jest.fn();
   const invoke = jest.fn<Promise<void>, []>();
 
@@ -31,12 +33,31 @@ describe('AccessRequestWorker', () => {
     invoke,
   } as unknown as MockDownstreamService;
 
-  const worker = new AccessRequestWorker(idempotencyService, mockDownstream);
+  const accessRecommendationService = {
+    createFromWebhook,
+  } as unknown as AccessRecommendationService;
+
+  const worker = new AccessRequestWorker(
+    idempotencyService,
+    mockDownstream,
+    accessRecommendationService,
+  );
 
   const jobData: AccessRequestDto = {
-    requestId: 'req-100',
-    employeeId: 'emp-42',
-    targetEntitlement: 'vpn-access',
+    request_id: 'req-100',
+    employee_id: 'emp-42',
+    request_type: 'GRANT_ENTITLEMENT',
+    timestamp: '2026-07-01T09:15:00Z',
+    requester: {
+      title: 'Data Analyst',
+      department: 'Finance Analytics',
+      cost_center: 'CC-FIN-07',
+    },
+    target: {
+      system_name: 'DATA_WAREHOUSE',
+      entitlement_key: 'FIN_DATASET_EDIT',
+      justification: 'Need to build quarterly revenue models.',
+    },
   };
 
   const job = {
@@ -47,6 +68,7 @@ describe('AccessRequestWorker', () => {
   beforeEach(() => {
     executeIdempotent.mockReset();
     invoke.mockReset();
+    createFromWebhook.mockReset();
   });
 
   it('initializes successfully with process defined', () => {
@@ -97,6 +119,7 @@ describe('AccessRequestWorker', () => {
       };
     });
     invoke.mockResolvedValue(undefined);
+    createFromWebhook.mockResolvedValue({} as never);
 
     const result = await worker.process(job);
 
@@ -107,6 +130,7 @@ describe('AccessRequestWorker', () => {
         endpoint: ACCESS_REQUEST_WORKER_ENDPOINT,
       }),
     );
+    expect(createFromWebhook).toHaveBeenCalledWith(jobData);
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(result).toEqual(processed);
   });
@@ -124,6 +148,7 @@ describe('AccessRequestWorker', () => {
     const result = await worker.process(job);
 
     expect(result).toEqual(replayed);
+    expect(createFromWebhook).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalled();
   });
 

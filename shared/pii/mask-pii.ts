@@ -1,4 +1,11 @@
-const PII_KEYS = new Set(['employee_id', 'cost_center', 'ssn', 'email']);
+const PII_KEYS = new Set([
+  'employee_id',
+  'employeeId',
+  'cost_center',
+  'costCenter',
+  'ssn',
+  'email',
+]);
 
 function maskValue(value: string): string {
   if (value.length <= 4) {

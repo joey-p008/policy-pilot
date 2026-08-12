@@ -15,6 +15,7 @@ const retrievalRequestSchema = z.object({
   requestId: z.string().min(1),
   targetEntitlement: z.string().min(1),
   justification: z.string().min(1).optional(),
+  title: z.string().min(1).optional(),
   costCenter: z.string().min(1).optional(),
   department: z.string().min(1).optional(),
   targetResource: z.string().min(1).optional(),
@@ -53,6 +54,9 @@ export class RetrievalService {
   private buildQueryText(request: RetrievalRequest): string {
     const parts: string[] = [`Access entitlement request: ${request.targetEntitlement}`];
 
+    if (request.title !== undefined && request.title.trim().length > 0) {
+      parts.push(`Requester title: ${request.title.trim()}`);
+    }
     if (request.department !== undefined && request.department.trim().length > 0) {
       parts.push(`Department: ${request.department.trim()}`);
     }

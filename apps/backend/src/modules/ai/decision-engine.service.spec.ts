@@ -90,6 +90,7 @@ describe('DecisionEngineService', () => {
         requestId: 'req-42',
         targetEntitlement: 'FIN_BILLING_EXPORT',
         justification: 'Need billing export for close',
+        title: 'Data Analyst',
         department: 'Finance Analytics',
         costCenter: 'CC-FIN-07',
         targetResource: 'DATA_WAREHOUSE / FIN_DATASET',
@@ -102,6 +103,7 @@ describe('DecisionEngineService', () => {
     expect(assembledPrompt).toContain('CC-FIN-07');
     expect(assembledPrompt).toContain('FIN_DATASET_EDIT');
     expect(assembledPrompt).toContain('Finance Analytics');
+    expect(assembledPrompt).toContain('Data Analyst');
   });
 
   it('forces ESCALATE when APPROVE citations cannot be grounded in retrieved chunks', async () => {

@@ -46,7 +46,7 @@ function buildValidRecommendationContent(): string {
 function buildBaseObservation(overrides: Partial<LlmObservation> = {}): LlmObservation {
   return {
     promptName: 'system-policy',
-    promptVersion: '1.3.0',
+    promptVersion: '1.4.0',
     model: 'gpt-4o-mini',
     inputPrompt: 'masked prompt body',
     modelResponse: '{}',

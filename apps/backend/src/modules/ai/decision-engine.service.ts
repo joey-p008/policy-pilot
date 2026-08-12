@@ -17,6 +17,7 @@ const DecisionEngineRequestSchema = z.object({
   requestId: z.string().min(1),
   targetEntitlement: z.string().min(1),
   justification: z.string().min(1),
+  title: z.string().min(1).optional(),
   costCenter: z.string().min(1).optional(),
   department: z.string().min(1).optional(),
   targetResource: z.string().min(1).optional(),
@@ -41,7 +42,9 @@ export class DecisionEngineService {
       access_request: {
         request_id: validated.request.requestId,
         target_entitlement: validated.request.targetEntitlement,
+        entitlement_key: validated.request.targetEntitlement,
         justification: validated.request.justification,
+        ...(validated.request.title !== undefined ? { title: validated.request.title } : {}),
         ...(validated.request.department !== undefined
           ? { department: validated.request.department }
           : {}),
@@ -49,7 +52,10 @@ export class DecisionEngineService {
           ? { cost_center: validated.request.costCenter }
           : {}),
         ...(validated.request.targetResource !== undefined
-          ? { target_resource: validated.request.targetResource }
+          ? {
+              target_resource: validated.request.targetResource,
+              system_name: validated.request.targetResource,
+            }
           : {}),
         ...(validated.request.currentEntitlements !== undefined
           ? { current_entitlements: validated.request.currentEntitlements }

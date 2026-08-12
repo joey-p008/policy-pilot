@@ -1,7 +1,12 @@
 export interface BaseAccessRequest {
   requestId: string;
   employeeId: string;
+  title: string;
+  department: string;
+  costCenter: string;
+  systemName: string;
   targetEntitlement: string;
+  justification: string;
 }
 
 export interface PolicyCitation {
@@ -22,12 +27,15 @@ export interface AccessRecommendation {
 }
 
 export interface CreateAccessRequestPayload {
-  targetEntitlement: string;
+  title: string;
+  department: string;
+  costCenter: string;
+  systemName: string;
+  entitlementKey: string;
   justification: string;
 }
 
 export interface PendingAccessRequest extends BaseAccessRequest {
-  justification: string;
   currentEntitlements: string[];
   recommendation: AccessRecommendation;
 }
@@ -35,7 +43,6 @@ export interface PendingAccessRequest extends BaseAccessRequest {
 export type AccessRequestHistoryStatus = 'APPROVED' | 'DENIED' | 'ESCALATED';
 
 export interface AccessRequestHistoryItem extends BaseAccessRequest {
-  justification: string;
   currentEntitlements: string[];
   recommendation: AccessRecommendation;
   status: AccessRequestHistoryStatus;
