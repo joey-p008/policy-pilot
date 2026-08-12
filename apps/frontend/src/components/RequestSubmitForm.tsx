@@ -1,13 +1,14 @@
 import { useState, type FormEvent, type JSX } from 'react';
 
 import {
-  ACCESS_REQUEST_ENTITLEMENT_KEYS,
   ACCESS_REQUEST_SYSTEM_NAMES,
+  getEntitlementKeysForSystem,
   isAccessRequestCatalogMember,
+  isValidSystemEntitlementPair,
 } from '../lib/access-request-options';
 
 const SELECT_CLASS_NAME =
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 focus:border-teal-500 focus:outline-none';
+  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 focus:border-teal-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50';
 
 export function RequestSubmitForm({
   isSubmitting,
@@ -26,11 +27,11 @@ export function RequestSubmitForm({
   const [entitlementKey, setEntitlementKey] = useState('');
   const [justification, setJustification] = useState('');
 
+  const hasSelectedSystem = isAccessRequestCatalogMember(systemName, ACCESS_REQUEST_SYSTEM_NAMES);
+  const entitlementOptions = getEntitlementKeysForSystem(systemName);
   const trimmedJustification = justification.trim();
   const canSubmitTicket =
-    isAccessRequestCatalogMember(systemName, ACCESS_REQUEST_SYSTEM_NAMES) &&
-    isAccessRequestCatalogMember(entitlementKey, ACCESS_REQUEST_ENTITLEMENT_KEYS) &&
-    trimmedJustification.length > 0;
+    isValidSystemEntitlementPair(systemName, entitlementKey) && trimmedJustification.length > 0;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -69,6 +70,7 @@ export function RequestSubmitForm({
           value={systemName}
           onChange={(event) => {
             setSystemName(event.target.value);
+            setEntitlementKey('');
           }}
           disabled={isSubmitting}
           className={SELECT_CLASS_NAME}
@@ -90,11 +92,13 @@ export function RequestSubmitForm({
           onChange={(event) => {
             setEntitlementKey(event.target.value);
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !hasSelectedSystem}
           className={SELECT_CLASS_NAME}
         >
-          <option value="">Select entitlement key</option>
-          {ACCESS_REQUEST_ENTITLEMENT_KEYS.map((option) => (
+          <option value="">
+            {hasSelectedSystem ? 'Select entitlement key' : 'Select a system name first'}
+          </option>
+          {entitlementOptions.map((option) => (
             <option key={option} value={option}>
               {option}
             </option>
