@@ -2,20 +2,32 @@ import { useState, type FormEvent, type JSX } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 
 import { useRequesterProfile } from '../context/RequesterProfileContext';
+import {
+  isRequesterProfileComplete,
+  REQUESTER_COST_CENTERS,
+  REQUESTER_DEPARTMENTS,
+  REQUESTER_TITLES,
+  selectRequesterProfileValue,
+} from '../lib/requester-profile';
+
+const SELECT_CLASS_NAME =
+  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-teal-500 focus:outline-none';
 
 export function ProfilePage(): JSX.Element {
   const { profile, isComplete, setProfile } = useRequesterProfile();
   const navigate = useNavigate();
-  const [title, setTitle] = useState(profile?.title ?? '');
-  const [department, setDepartment] = useState(profile?.department ?? '');
-  const [costCenter, setCostCenter] = useState(profile?.costCenter ?? '');
+  const [title, setTitle] = useState(() =>
+    selectRequesterProfileValue(profile?.title, REQUESTER_TITLES),
+  );
+  const [department, setDepartment] = useState(() =>
+    selectRequesterProfileValue(profile?.department, REQUESTER_DEPARTMENTS),
+  );
+  const [costCenter, setCostCenter] = useState(() =>
+    selectRequesterProfileValue(profile?.costCenter, REQUESTER_COST_CENTERS),
+  );
   const [submitted, setSubmitted] = useState(false);
 
-  const trimmedTitle = title.trim();
-  const trimmedDepartment = department.trim();
-  const trimmedCostCenter = costCenter.trim();
-  const canSubmit =
-    trimmedTitle.length > 0 && trimmedDepartment.length > 0 && trimmedCostCenter.length > 0;
+  const canSubmit = isRequesterProfileComplete({ title, department, costCenter });
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -23,9 +35,9 @@ export function ProfilePage(): JSX.Element {
       return;
     }
     setProfile({
-      title: trimmedTitle,
-      department: trimmedDepartment,
-      costCenter: trimmedCostCenter,
+      title,
+      department,
+      costCenter,
     });
     setSubmitted(true);
     navigate('/', { replace: true });
@@ -57,43 +69,58 @@ export function ProfilePage(): JSX.Element {
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Title
             </span>
-            <input
-              type="text"
+            <select
               value={title}
               onChange={(event) => {
                 setTitle(event.target.value);
               }}
-              placeholder="e.g. Data Analyst"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
-            />
+              className={SELECT_CLASS_NAME}
+            >
+              <option value="">Select title</option>
+              {REQUESTER_TITLES.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Department
             </span>
-            <input
-              type="text"
+            <select
               value={department}
               onChange={(event) => {
                 setDepartment(event.target.value);
               }}
-              placeholder="e.g. Finance Analytics"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
-            />
+              className={SELECT_CLASS_NAME}
+            >
+              <option value="">Select department</option>
+              {REQUESTER_DEPARTMENTS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Cost center
             </span>
-            <input
-              type="text"
+            <select
               value={costCenter}
               onChange={(event) => {
                 setCostCenter(event.target.value);
               }}
-              placeholder="e.g. CC-FIN-07"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
-            />
+              className={`${SELECT_CLASS_NAME} font-mono`}
+            >
+              <option value="">Select cost center</option>
+              {REQUESTER_COST_CENTERS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </label>
           <button
             type="submit"
