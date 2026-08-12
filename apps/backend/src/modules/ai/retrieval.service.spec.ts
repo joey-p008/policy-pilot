@@ -73,7 +73,11 @@ describe('RetrievalService', () => {
     ]);
 
     expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledTimes(1);
-    expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledWith(queryEmbedding, 4);
+    expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledWith(
+      queryEmbedding,
+      4,
+      undefined,
+    );
     expect(chunks).toHaveLength(4);
     expect(chunks[0]?.document_id).toBe('POL-2026-01');
   });
@@ -113,5 +117,29 @@ describe('RetrievalService', () => {
     expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledWith([
       'Access entitlement request: FIN_BILLING_EXPORT. Requester title: Data Analyst. Department: Finance Analytics. Cost center: CC-FIN-07. Target resource: DATA_WAREHOUSE / FIN_DATASET. Current entitlements: FIN_DATASET_EDIT. Business justification: Requester needs bulk billing export',
     ]);
+    expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledWith(queryEmbedding, 4, {
+      documentIdPrefix: 'POL-2026-01-DGW',
+    });
+  });
+
+  it('does not request a cloud-policy prefix for a DATA_WAREHOUSE target', async () => {
+    const queryEmbedding = buildMockEmbedding(2);
+    mockEmbeddingClient.embedTexts.mockResolvedValue([queryEmbedding]);
+    mockPolicyChunkRepository.findTopSimilar.mockResolvedValue([]);
+
+    await service.retrieve({
+      requestId: 'req-dw',
+      targetEntitlement: 'FIN_DATASET_READ',
+      targetResource: 'DATA_WAREHOUSE',
+    });
+
+    expect(mockPolicyChunkRepository.findTopSimilar).toHaveBeenCalledWith(queryEmbedding, 4, {
+      documentIdPrefix: 'POL-2026-01-DGW',
+    });
+    expect(mockPolicyChunkRepository.findTopSimilar).not.toHaveBeenCalledWith(
+      queryEmbedding,
+      4,
+      expect.objectContaining({ documentIdPrefix: 'POL-2026-02-SEC' }),
+    );
   });
 });

@@ -16,6 +16,7 @@ export const ACCESS_REQUEST_QUEUE = 'access-request-queue';
 export const ACCESS_REQUEST_JOB_NAME = 'process';
 export const ACCESS_REQUESTS_WEBHOOK_ENDPOINT = '/webhooks/access-requests';
 export const ACCESS_REQUEST_WORKER_ENDPOINT = '/workers/access-request-queue';
+export const ACCESS_GRANT_IDEMPOTENCY_ENDPOINT = '/access-requests/grant';
 export const ACCESS_REQUEST_WORKER_CONCURRENCY = 2;
 
 /**
@@ -43,6 +44,10 @@ export function buildAccessRequestStatusUrl(requestId: string): string {
 
 export function buildWorkerIdempotencyRequestId(requestId: string): string {
   return `worker:access-request:${requestId}`;
+}
+
+export function buildGrantIdempotencyRequestId(requestId: string): string {
+  return `grant:${requestId}`;
 }
 
 export function buildAccessRequestBackoffDelayMs(): number {

@@ -13,6 +13,7 @@ import {
 } from './access-requests.constants';
 import { AccessRequestsController } from './access-requests.controller';
 import { AccessRequestsService } from './access-requests.service';
+import { EntitlementExecutionService } from './entitlement-execution.service';
 import { HitlAccessRequestsService } from './hitl-access-requests.service';
 import { MockDownstreamService } from './mock-downstream.service';
 
@@ -31,6 +32,7 @@ import { MockDownstreamService } from './mock-downstream.service';
     AccessRequestsService,
     HitlAccessRequestsService,
     AccessRecommendationService,
+    EntitlementExecutionService,
     AccessRequestWorker,
     MockDownstreamService,
   ],

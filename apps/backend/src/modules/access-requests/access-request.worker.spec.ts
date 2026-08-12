@@ -18,30 +18,20 @@ import {
   buildWorkerIdempotencyRequestId,
 } from './access-requests.constants';
 import { AccessRequestDto } from './dto/access-requests.dto';
-import { MockDownstreamRateLimitError, MockDownstreamService } from './mock-downstream.service';
 
 describe('AccessRequestWorker', () => {
   const createFromWebhook = jest.fn();
   const executeIdempotent = jest.fn();
-  const invoke = jest.fn<Promise<void>, []>();
 
   const idempotencyService = {
     executeIdempotent,
   } as unknown as IdempotencyService;
 
-  const mockDownstream = {
-    invoke,
-  } as unknown as MockDownstreamService;
-
   const accessRecommendationService = {
     createFromWebhook,
   } as unknown as AccessRecommendationService;
 
-  const worker = new AccessRequestWorker(
-    idempotencyService,
-    mockDownstream,
-    accessRecommendationService,
-  );
+  const worker = new AccessRequestWorker(idempotencyService, accessRecommendationService);
 
   const jobData: AccessRequestDto = {
     request_id: 'req-100',
@@ -67,7 +57,6 @@ describe('AccessRequestWorker', () => {
 
   beforeEach(() => {
     executeIdempotent.mockReset();
-    invoke.mockReset();
     createFromWebhook.mockReset();
   });
 
@@ -118,7 +107,6 @@ describe('AccessRequestWorker', () => {
         response,
       };
     });
-    invoke.mockResolvedValue(undefined);
     createFromWebhook.mockResolvedValue({} as never);
 
     const result = await worker.process(job);
@@ -131,11 +119,10 @@ describe('AccessRequestWorker', () => {
       }),
     );
     expect(createFromWebhook).toHaveBeenCalledWith(jobData);
-    expect(invoke).toHaveBeenCalledTimes(1);
     expect(result).toEqual(processed);
   });
 
-  it('skips mock downstream when IdempotencyService reports a replay', async () => {
+  it('skips recommendation creation when IdempotencyService reports a replay', async () => {
     const replayed: IdempotentResult<AccessRequestProcessedResponse> = {
       replayed: true,
       response: {
@@ -149,18 +136,5 @@ describe('AccessRequestWorker', () => {
 
     expect(result).toEqual(replayed);
     expect(createFromWebhook).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalled();
-  });
-
-  it('propagates mock downstream rate-limit errors for BullMQ retry', async () => {
-    executeIdempotent.mockImplementation(async (params) => {
-      return {
-        replayed: false,
-        response: await params.execute(),
-      };
-    });
-    invoke.mockRejectedValue(new MockDownstreamRateLimitError());
-
-    await expect(worker.process(job)).rejects.toBeInstanceOf(MockDownstreamRateLimitError);
   });
 });

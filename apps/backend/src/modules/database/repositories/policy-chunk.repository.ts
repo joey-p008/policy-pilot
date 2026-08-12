@@ -27,7 +27,16 @@ export type PolicyChunkSimilarityRow = z.infer<typeof PolicyChunkSimilarityRowSc
 const SimilarityQuerySchema = z.object({
   embedding: z.array(z.number()).length(1536),
   limit: z.number().int().positive(),
+  documentIdPrefix: z
+    .string()
+    .min(1)
+    .regex(/^[A-Z0-9-]+$/)
+    .optional(),
 });
+
+export interface PolicyChunkSimilarityFilters {
+  documentIdPrefix?: string;
+}
 
 @Injectable()
 export class PolicyChunkRepository {
@@ -80,29 +89,56 @@ export class PolicyChunkRepository {
   public async findTopSimilar(
     embedding: number[],
     limit: number,
+    filters?: PolicyChunkSimilarityFilters,
   ): Promise<PolicyChunkSimilarityRow[]> {
-    const query = SimilarityQuerySchema.parse({ embedding, limit });
+    const query = SimilarityQuerySchema.parse({
+      embedding,
+      limit,
+      documentIdPrefix: filters?.documentIdPrefix,
+    });
     const embeddingLiteral = `[${query.embedding.join(',')}]`;
 
-    const rows = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        documentId: string;
-        pageNumber: number;
-        sectionTitle: string;
-        content: string;
-      }>
-    >`
-      SELECT
-        id,
-        document_id AS "documentId",
-        page_number AS "pageNumber",
-        section_title AS "sectionTitle",
-        content
-      FROM policy_chunks
-      ORDER BY embedding <=> ${embeddingLiteral}::vector
-      LIMIT ${query.limit}
-    `;
+    const rows =
+      query.documentIdPrefix === undefined
+        ? await this.prisma.$queryRaw<
+            Array<{
+              id: string;
+              documentId: string;
+              pageNumber: number;
+              sectionTitle: string;
+              content: string;
+            }>
+          >`
+            SELECT
+              id,
+              document_id AS "documentId",
+              page_number AS "pageNumber",
+              section_title AS "sectionTitle",
+              content
+            FROM policy_chunks
+            ORDER BY embedding <=> ${embeddingLiteral}::vector
+            LIMIT ${query.limit}
+          `
+        : await this.prisma.$queryRaw<
+            Array<{
+              id: string;
+              documentId: string;
+              pageNumber: number;
+              sectionTitle: string;
+              content: string;
+            }>
+          >`
+            SELECT
+              id,
+              document_id AS "documentId",
+              page_number AS "pageNumber",
+              section_title AS "sectionTitle",
+              content
+            FROM policy_chunks
+            WHERE document_id LIKE ${`${query.documentIdPrefix}%`}
+            ORDER BY embedding <=> ${embeddingLiteral}::vector
+            LIMIT ${query.limit}
+          `;
 
     return rows.map((row) => PolicyChunkSimilarityRowSchema.parse(row));
   }
