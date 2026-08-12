@@ -65,7 +65,7 @@ describe('EntitlementExecutionService', () => {
     });
   });
 
-  it('upserts the entitlement, invokes mock downstream, and audits ACCESS_GRANTED', async () => {
+  it('invokes mock downstream, upserts the entitlement, and audits ACCESS_GRANTED', async () => {
     const result = await service.grant(grantInput);
 
     expect(findByEmployeeIdHash).toHaveBeenCalledWith(hashIdentifier(EMPLOYEE_ID));
@@ -75,6 +75,9 @@ describe('EntitlementExecutionService', () => {
       permissionLevel: 'FIN_DATASET_READ',
     });
     expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.invocationCallOrder[0]).toBeLessThan(
+      upsertByUserResourcePermission.mock.invocationCallOrder[0],
+    );
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
         requestId: 'req-grant-1',
@@ -118,10 +121,17 @@ describe('EntitlementExecutionService', () => {
   });
 
   it('propagates mock downstream rate-limit errors without storing a grant', async () => {
-    invoke.mockRejectedValue(new MockDownstreamRateLimitError());
+    invoke.mockRejectedValue(new MockDownstreamRateLimitError(1_200));
 
     await expect(service.grant(grantInput)).rejects.toBeInstanceOf(MockDownstreamRateLimitError);
-    expect(upsertByUserResourcePermission).toHaveBeenCalledTimes(1);
+    expect(upsertByUserResourcePermission).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  it('carries a retry-after hint on the rate-limit error so the worker can pause', async () => {
+    invoke.mockRejectedValue(new MockDownstreamRateLimitError(1_200));
+
+    await expect(service.grant(grantInput)).rejects.toMatchObject({ retryAfterMs: 1_200 });
   });
 
   it('throws NotFoundException when the employee has no user row', async () => {

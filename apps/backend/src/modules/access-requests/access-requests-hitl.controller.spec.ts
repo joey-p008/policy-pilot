@@ -160,6 +160,7 @@ describe('AccessRequestsHitlController', () => {
     mockHitlService.escalate.mockResolvedValue({
       requestId: 'req-1',
       status: 'escalated',
+      provisioningStatus: 'NOT_APPLICABLE',
     });
 
     const response = await request(app.getHttpServer())
@@ -167,7 +168,11 @@ describe('AccessRequestsHitlController', () => {
       .set(adminHeaders)
       .expect(200);
 
-    expect(response.body).toEqual({ requestId: 'req-1', status: 'escalated' });
+    expect(response.body).toEqual({
+      requestId: 'req-1',
+      status: 'escalated',
+      provisioningStatus: 'NOT_APPLICABLE',
+    });
     expect(mockHitlService.escalate).toHaveBeenCalledWith('req-1', DEMO_PRINCIPALS.admin);
   });
 

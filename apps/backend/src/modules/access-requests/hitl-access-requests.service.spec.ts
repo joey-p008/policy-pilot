@@ -7,13 +7,14 @@ import { DEMO_PRINCIPALS } from '../auth/demo-auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
   AccessRequestRepository,
+  PROVISIONING_STATUS,
 } from '../database/repositories/access-request.repository';
 import { EntitlementRepository } from '../database/repositories/entitlement.repository';
 import { UserRepository } from '../database/repositories/user.repository';
+import { AccessGrantQueueService } from './access-grant-queue.service';
 import { AccessRecommendationService } from './access-recommendation.service';
 import { EntitlementExecutionService } from './entitlement-execution.service';
 import { HitlAccessRequestsService } from './hitl-access-requests.service';
-import { MockDownstreamRateLimitError } from './mock-downstream.service';
 import { SEED_REQUESTOR_EMPLOYEE_ID, SEED_REQUESTOR_USER_ID } from './seed-ids';
 
 const hitlCreateDto = {
@@ -25,6 +26,14 @@ const hitlCreateDto = {
   justification: 'Need admin for incident response',
 };
 
+const executionInput = {
+  requestId: 'req-1',
+  employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
+  actorUserId: DEMO_PRINCIPALS.admin.userId,
+  systemName: 'DATA_WAREHOUSE',
+  targetEntitlement: 'FIN_DATASET_READ',
+};
+
 function pendingRequest(overrides: Partial<AccessRequest> = {}): AccessRequest {
   return {
     requestId: 'req-1',
@@ -32,6 +41,7 @@ function pendingRequest(overrides: Partial<AccessRequest> = {}): AccessRequest {
     systemName: 'DATA_WAREHOUSE',
     targetEntitlement: 'FIN_DATASET_READ',
     status: ACCESS_REQUEST_STATUS.PENDING_REVIEW,
+    provisioningStatus: PROVISIONING_STATUS.NOT_APPLICABLE,
     ...overrides,
   } as AccessRequest;
 }
@@ -40,7 +50,12 @@ describe('HitlAccessRequestsService', () => {
   const mockAccessRequestRepository: jest.Mocked<
     Pick<
       AccessRequestRepository,
-      'create' | 'findByRequestId' | 'findPendingReview' | 'findDecided' | 'markDecided'
+      | 'create'
+      | 'findByRequestId'
+      | 'findPendingReview'
+      | 'findDecided'
+      | 'markDecided'
+      | 'updateProvisioningStatus'
     >
   > = {
     create: jest.fn(),
@@ -48,6 +63,7 @@ describe('HitlAccessRequestsService', () => {
     findPendingReview: jest.fn(),
     findDecided: jest.fn(),
     markDecided: jest.fn(),
+    updateProvisioningStatus: jest.fn(),
   };
 
   const mockEntitlementRepository: jest.Mocked<
@@ -74,6 +90,14 @@ describe('HitlAccessRequestsService', () => {
     revoke: jest.fn(),
   };
 
+  const mockAccessGrantQueueService: jest.Mocked<
+    Pick<AccessGrantQueueService, 'enqueueGrant' | 'cancelQueuedGrant' | 'pauseForRateLimit'>
+  > = {
+    enqueueGrant: jest.fn(),
+    cancelQueuedGrant: jest.fn(),
+    pauseForRateLimit: jest.fn(),
+  };
+
   const mockAuditLogService: jest.Mocked<Pick<AuditLogService, 'append'>> = {
     append: jest.fn(),
   };
@@ -88,9 +112,12 @@ describe('HitlAccessRequestsService', () => {
       mockUserRepository as unknown as UserRepository,
       mockAccessRecommendationService as unknown as AccessRecommendationService,
       mockEntitlementExecutionService as unknown as EntitlementExecutionService,
+      mockAccessGrantQueueService as unknown as AccessGrantQueueService,
       mockAuditLogService as unknown as AuditLogService,
     );
 
+    mockAccessGrantQueueService.enqueueGrant.mockResolvedValue(undefined);
+    mockAccessGrantQueueService.cancelQueuedGrant.mockResolvedValue(true);
     mockUserRepository.findByEmployeeIdHashes.mockResolvedValue([
       {
         id: SEED_REQUESTOR_USER_ID,
@@ -146,43 +173,58 @@ describe('HitlAccessRequestsService', () => {
     );
   });
 
-  it('grants the entitlement before marking a pending request approved', async () => {
-    mockAccessRequestRepository.findByRequestId.mockResolvedValue(pendingRequest());
-    mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
-    mockAuditLogService.append.mockResolvedValue({} as never);
-    mockEntitlementExecutionService.grant.mockResolvedValue({
-      status: 'granted',
-      requestId: 'req-1',
-      userId: SEED_REQUESTOR_USER_ID,
-      resourceName: 'DATA_WAREHOUSE',
-      permissionLevel: 'FIN_DATASET_READ',
+  describe('approve', () => {
+    beforeEach(() => {
+      mockAccessRequestRepository.findByRequestId.mockResolvedValue(pendingRequest());
+      mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
+      mockAuditLogService.append.mockResolvedValue({} as never);
     });
 
-    const result = await service.approve('req-1', DEMO_PRINCIPALS.admin);
+    it('queues the grant instead of calling the downstream inline', async () => {
+      const result = await service.approve('req-1', DEMO_PRINCIPALS.admin);
 
-    expect(result).toEqual({ requestId: 'req-1', status: 'approved' });
-    expect(mockEntitlementExecutionService.grant).toHaveBeenCalledWith({
-      requestId: 'req-1',
-      employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
-      actorUserId: DEMO_PRINCIPALS.admin.userId,
-      systemName: 'DATA_WAREHOUSE',
-      targetEntitlement: 'FIN_DATASET_READ',
+      expect(result).toEqual({
+        requestId: 'req-1',
+        status: 'approved',
+        provisioningStatus: PROVISIONING_STATUS.QUEUED,
+      });
+      expect(mockAccessGrantQueueService.enqueueGrant).toHaveBeenCalledWith(executionInput);
+      expect(mockEntitlementExecutionService.grant).not.toHaveBeenCalled();
     });
-    expect(mockAccessRequestRepository.markDecided).toHaveBeenCalledWith({
-      requestId: 'req-1',
-      status: ACCESS_REQUEST_STATUS.APPROVED,
-      decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+
+    it('records the request as APPROVED and QUEUED', async () => {
+      await service.approve('req-1', DEMO_PRINCIPALS.admin);
+
+      expect(mockAccessRequestRepository.markDecided).toHaveBeenCalledWith({
+        requestId: 'req-1',
+        status: ACCESS_REQUEST_STATUS.APPROVED,
+        provisioningStatus: PROVISIONING_STATUS.QUEUED,
+        decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+      });
     });
-  });
 
-  it('does not mark decided when mock downstream rate-limits the grant', async () => {
-    mockAccessRequestRepository.findByRequestId.mockResolvedValue(pendingRequest());
-    mockEntitlementExecutionService.grant.mockRejectedValue(new MockDownstreamRateLimitError());
+    it('persists the decision before enqueuing so the worker cannot race the write', async () => {
+      await service.approve('req-1', DEMO_PRINCIPALS.admin);
 
-    await expect(service.approve('req-1', DEMO_PRINCIPALS.admin)).rejects.toBeInstanceOf(
-      MockDownstreamRateLimitError,
-    );
-    expect(mockAccessRequestRepository.markDecided).not.toHaveBeenCalled();
+      expect(mockAccessRequestRepository.markDecided.mock.invocationCallOrder[0]).toBeLessThan(
+        mockAccessGrantQueueService.enqueueGrant.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('audits the human approval with the queued provisioning state', async () => {
+      await service.approve('req-1', DEMO_PRINCIPALS.admin);
+
+      expect(mockAuditLogService.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'HUMAN_APPROVED',
+          newState: {
+            status: ACCESS_REQUEST_STATUS.APPROVED,
+            actor_id: DEMO_PRINCIPALS.admin.actorId,
+            provisioning_status: PROVISIONING_STATUS.QUEUED,
+          },
+        }),
+      );
+    });
   });
 
   it('escalates a pending request without granting or revoking', async () => {
@@ -192,12 +234,17 @@ describe('HitlAccessRequestsService', () => {
 
     const result = await service.escalate('req-1', DEMO_PRINCIPALS.admin);
 
-    expect(result).toEqual({ requestId: 'req-1', status: 'escalated' });
-    expect(mockEntitlementExecutionService.grant).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      requestId: 'req-1',
+      status: 'escalated',
+      provisioningStatus: PROVISIONING_STATUS.NOT_APPLICABLE,
+    });
+    expect(mockAccessGrantQueueService.enqueueGrant).not.toHaveBeenCalled();
     expect(mockEntitlementExecutionService.revoke).not.toHaveBeenCalled();
     expect(mockAccessRequestRepository.markDecided).toHaveBeenCalledWith({
       requestId: 'req-1',
       status: ACCESS_REQUEST_STATUS.ESCALATED,
+      provisioningStatus: PROVISIONING_STATUS.NOT_APPLICABLE,
       decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
     });
     expect(mockAuditLogService.append).toHaveBeenCalledWith(
@@ -207,29 +254,85 @@ describe('HitlAccessRequestsService', () => {
     );
   });
 
-  it('revokes the grant when overriding an approval to deny', async () => {
-    mockAccessRequestRepository.findByRequestId.mockResolvedValue(
-      pendingRequest({ status: ACCESS_REQUEST_STATUS.APPROVED }),
-    );
+  it('does not touch the grant queue when denying a request that was never approved', async () => {
+    mockAccessRequestRepository.findByRequestId.mockResolvedValue(pendingRequest());
     mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
     mockAuditLogService.append.mockResolvedValue({} as never);
-    mockEntitlementExecutionService.revoke.mockResolvedValue(undefined);
 
-    const result = await service.deny('req-1', DEMO_PRINCIPALS.admin);
+    await service.deny('req-1', DEMO_PRINCIPALS.admin);
 
-    expect(result).toEqual({ requestId: 'req-1', status: 'denied' });
-    expect(mockEntitlementExecutionService.revoke).toHaveBeenCalledTimes(1);
-    expect(mockEntitlementExecutionService.grant).not.toHaveBeenCalled();
-    expect(mockAuditLogService.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'HUMAN_DECISION_OVERRIDE',
-        previousState: { status: ACCESS_REQUEST_STATUS.APPROVED },
-        newState: {
-          status: ACCESS_REQUEST_STATUS.DENIED,
-          actor_id: DEMO_PRINCIPALS.admin.actorId,
-        },
-      }),
-    );
+    expect(mockAccessGrantQueueService.cancelQueuedGrant).not.toHaveBeenCalled();
+    expect(mockEntitlementExecutionService.revoke).not.toHaveBeenCalled();
+  });
+
+  describe('overriding an approval', () => {
+    beforeEach(() => {
+      mockAccessRequestRepository.findByRequestId.mockResolvedValue(
+        pendingRequest({
+          status: ACCESS_REQUEST_STATUS.APPROVED,
+          provisioningStatus: PROVISIONING_STATUS.QUEUED,
+        }),
+      );
+      mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
+      mockAuditLogService.append.mockResolvedValue({} as never);
+      mockEntitlementExecutionService.revoke.mockResolvedValue(undefined);
+    });
+
+    it('withdraws a still-queued grant before revoking', async () => {
+      const result = await service.deny('req-1', DEMO_PRINCIPALS.admin);
+
+      expect(result).toEqual({
+        requestId: 'req-1',
+        status: 'denied',
+        provisioningStatus: PROVISIONING_STATUS.NOT_APPLICABLE,
+      });
+      expect(mockAccessGrantQueueService.cancelQueuedGrant).toHaveBeenCalledWith('req-1');
+      expect(mockEntitlementExecutionService.revoke).toHaveBeenCalledTimes(1);
+      expect(
+        mockAccessGrantQueueService.cancelQueuedGrant.mock.invocationCallOrder[0],
+      ).toBeLessThan(mockEntitlementExecutionService.revoke.mock.invocationCallOrder[0]);
+    });
+
+    it('still revokes when the grant had already left the queue', async () => {
+      mockAccessGrantQueueService.cancelQueuedGrant.mockResolvedValue(false);
+
+      await service.deny('req-1', DEMO_PRINCIPALS.admin);
+
+      expect(mockEntitlementExecutionService.revoke).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the provisioning state and audits the override', async () => {
+      await service.deny('req-1', DEMO_PRINCIPALS.admin);
+
+      expect(mockAccessRequestRepository.markDecided).toHaveBeenCalledWith({
+        requestId: 'req-1',
+        status: ACCESS_REQUEST_STATUS.DENIED,
+        provisioningStatus: PROVISIONING_STATUS.NOT_APPLICABLE,
+        decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+      });
+      expect(mockAuditLogService.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'HUMAN_DECISION_OVERRIDE',
+          previousState: { status: ACCESS_REQUEST_STATUS.APPROVED },
+          newState: {
+            status: ACCESS_REQUEST_STATUS.DENIED,
+            actor_id: DEMO_PRINCIPALS.admin.actorId,
+            provisioning_status: PROVISIONING_STATUS.NOT_APPLICABLE,
+          },
+        }),
+      );
+    });
+
+    it('re-queues the grant when overriding an escalation back to approved', async () => {
+      mockAccessRequestRepository.findByRequestId.mockResolvedValue(
+        pendingRequest({ status: ACCESS_REQUEST_STATUS.ESCALATED }),
+      );
+
+      await service.approve('req-1', DEMO_PRINCIPALS.admin);
+
+      expect(mockAccessGrantQueueService.enqueueGrant).toHaveBeenCalledWith(executionInput);
+      expect(mockAccessGrantQueueService.cancelQueuedGrant).not.toHaveBeenCalled();
+    });
   });
 
   it('throws ConflictException when overriding to the same status', async () => {
@@ -241,6 +344,7 @@ describe('HitlAccessRequestsService', () => {
       ConflictException,
     );
     expect(mockEntitlementExecutionService.revoke).not.toHaveBeenCalled();
+    expect(mockAccessGrantQueueService.enqueueGrant).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException when deciding a missing request', async () => {
@@ -249,6 +353,7 @@ describe('HitlAccessRequestsService', () => {
     await expect(service.approve('missing', DEMO_PRINCIPALS.admin)).rejects.toBeInstanceOf(
       NotFoundException,
     );
+    expect(mockAccessGrantQueueService.enqueueGrant).not.toHaveBeenCalled();
   });
 
   it('lists decided history items with entitlements for the request employee', async () => {
@@ -264,6 +369,7 @@ describe('HitlAccessRequestsService', () => {
         targetEntitlement: 'prod-postgres-admin',
         justification: 'Need access',
         status: ACCESS_REQUEST_STATUS.APPROVED,
+        provisioningStatus: PROVISIONING_STATUS.QUEUED,
         recommendationJson: {
           decision: 'APPROVE',
           rationale: 'Within policy',
@@ -288,9 +394,32 @@ describe('HitlAccessRequestsService', () => {
       title: 'Data Analyst',
       systemName: 'DATA_WAREHOUSE',
       status: 'APPROVED',
+      provisioningStatus: PROVISIONING_STATUS.QUEUED,
       currentEntitlements: ['payroll-api:read'],
       decidedAt: decidedAt.toISOString(),
       decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
     });
+  });
+
+  it('rejects a history row carrying an unrecognised provisioning status', async () => {
+    mockAccessRequestRepository.findDecided.mockResolvedValue([
+      {
+        requestId: 'req-hist-2',
+        employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
+        status: ACCESS_REQUEST_STATUS.APPROVED,
+        provisioningStatus: 'HALF_GRANTED',
+        recommendationJson: {
+          decision: 'APPROVE',
+          rationale: 'Within policy',
+          confidenceScore: 0.8,
+          policyCitations: [],
+        },
+        createdAt: new Date(),
+        decidedAt: new Date(),
+        decidedByAdminId: null,
+      } as unknown as AccessRequest,
+    ]);
+
+    await expect(service.listHistory()).rejects.toThrow(/Unexpected provisioning status/);
   });
 });

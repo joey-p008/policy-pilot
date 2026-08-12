@@ -61,6 +61,7 @@ describe('pending-access-requests mock store', () => {
     expect(result).toEqual({
       requestId: first.requestId,
       status: 'escalated',
+      provisioningStatus: 'NOT_APPLICABLE',
     });
     expect(getMockPendingAccessRequests().map((request) => request.requestId)).not.toContain(
       first.requestId,
@@ -70,6 +71,34 @@ describe('pending-access-requests mock store', () => {
     expect(console.info).toHaveBeenCalledWith('[HITL mock decision]', payload, {
       status: 'escalated',
     });
+  });
+
+  it('reports an approval as queued because the downstream grant runs asynchronously', () => {
+    const first = MOCK_PENDING_ACCESS_REQUESTS[0];
+    if (first === undefined) {
+      throw new Error('Expected at least one mock pending request');
+    }
+
+    const result = applyMockDecision({ requestId: first.requestId }, 'approved');
+
+    expect(result.provisioningStatus).toBe('QUEUED');
+    expect(getMockHistoryAccessRequests()[0]?.provisioningStatus).toBe('QUEUED');
+  });
+
+  it('clears the provisioning state when an approval is overridden to denied', () => {
+    const first = MOCK_PENDING_ACCESS_REQUESTS[0];
+    if (first === undefined) {
+      throw new Error('Expected at least one mock pending request');
+    }
+
+    applyMockDecision({ requestId: first.requestId }, 'approved');
+    const result = applyMockDecision({ requestId: first.requestId }, 'denied');
+
+    expect(result.provisioningStatus).toBe('NOT_APPLICABLE');
+    expect(
+      getMockHistoryAccessRequests().find((request) => request.requestId === first.requestId)
+        ?.provisioningStatus,
+    ).toBe('NOT_APPLICABLE');
   });
 
   it('overrides a history decision to a different status', () => {

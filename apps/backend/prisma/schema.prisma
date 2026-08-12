@@ -78,11 +78,13 @@ model AccessRequest {
   targetEntitlement   String    @map("target_entitlement")
   justification       String
   status              String
+  provisioningStatus  String    @default("NOT_APPLICABLE") @map("provisioning_status")
   recommendationJson  Json      @map("recommendation_json")
   createdAt           DateTime  @default(now()) @map("created_at")
   decidedAt           DateTime? @map("decided_at")
   decidedByAdminId    String?   @map("decided_by_admin_id")
 
   @@index([status])
+  @@index([provisioningStatus])
   @@map("access_requests")
 }

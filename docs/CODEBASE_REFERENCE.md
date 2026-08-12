@@ -7,7 +7,9 @@ Policy-Pilot ingests self-service access requests, retrieves grounding context f
 There are two request paths today:
 
 1. **HITL sync path** (wired end-to-end): `POST /access-requests` runs retrieval → decision engine → persist recommendation → audit, then the React dashboard lists pending items and records human approve / deny / escalate.
-2. **Webhook async path** (still mock-downstream only): `POST /webhooks/access-requests` enqueues BullMQ work that rate-limits against `MockDownstreamService`. It does not call the AI subsystem.
+2. **Webhook async path**: `POST /webhooks/access-requests` enqueues BullMQ work that produces a recommendation. It reaches no downstream adapter, so it is paced at the org-wide burst ceiling rather than the downstream contract.
+
+Entitlement execution is a third, separate stage. Approving a request enqueues a grant on `access-grant-queue`, which drains at the downstream contract; see [Two rate domains](#two-rate-domains).
 
 ---
 
@@ -88,7 +90,15 @@ flowchart TB
     Idem --> IdemTable[(idempotency_keys)]
     Service -->|enqueue| Queue[(BullMQ access-request-queue)]
     Queue --> Worker[AccessRequestWorker]
-    Worker --> Mock[MockDownstreamService]
+    Worker --> Rec[AccessRecommendationService]
+  end
+
+  subgraph exec [Entitlement execution]
+    HitlSvc -->|enqueueGrant| GrantQueue[(BullMQ access-grant-queue)]
+    GrantQueue --> GrantWorker[AccessGrantWorker]
+    GrantWorker --> Exec[EntitlementExecutionService]
+    Exec --> Mock[MockDownstreamService]
+    Exec --> EntTable[(entitlements)]
   end
 
   Retrieval -->|embedTexts| Embed[OpenAiEmbeddingClient]
@@ -103,9 +113,11 @@ flowchart TB
   Ingest[DocumentIngestionService] --> Chunks
 ```
 
-**HITL lifecycle:** dashboard submits `{ targetEntitlement, justification }` → service retrieves top-4 policy chunks (query includes justification when present) → decision engine returns a Zod-validated recommendation → row stored as `PENDING_REVIEW` with `recommendation_json` → audit `RECOMMENDATION_CREATED` → human Approve / Deny / Escalate updates status, sets `decided_at` / `decided_by_admin_id`, and appends `HUMAN_*` audit. Status changes do **not** grant or revoke entitlements.
+**HITL lifecycle:** dashboard submits `{ targetEntitlement, justification }` → service retrieves top-4 policy chunks (query includes justification when present) → decision engine returns a Zod-validated recommendation → row stored as `PENDING_REVIEW` with `recommendation_json` → audit `RECOMMENDATION_CREATED` → human Approve / Deny / Escalate updates status, sets `decided_at` / `decided_by_admin_id`, and appends `HUMAN_*` audit.
 
-**Webhook lifecycle:** accepted with `202 Accepted` and a `statusUrl`, job queued with exponential backoff, worker executes idempotently against a rate-limited mock downstream. Retrieval and the decision engine are not invoked on this path.
+**Grant lifecycle:** approving sets `status = APPROVED` and `provisioning_status = QUEUED`, then enqueues the grant. `AccessGrantWorker` calls the downstream, writes the entitlement, appends `ACCESS_GRANTED`, and flips `provisioning_status` to `PROVISIONED`. Overriding away from `APPROVED` first withdraws a still-queued job, then revokes; revoke stays synchronous because it never touches the downstream.
+
+**Webhook lifecycle:** accepted with `202 Accepted` and a `statusUrl`, job queued with exponential backoff, worker executes idempotently to produce a recommendation. No downstream adapter is involved on this path.
 
 ---
 
@@ -189,6 +201,25 @@ Non-pending decisions return `409 Conflict`. Unknown `requestId` returns `404`. 
 ### `config/rate-limit.config.ts`
 
 Env is parsed at **module import time**, not through `ConfigService`, because the BullMQ `@Processor` decorator evaluates its `limiter` options before the DI container exists. It derives `ACCESS_REQUEST_JOB_ATTEMPTS` such that cumulative exponential backoff outlasts one full rate-limit window, with a floor of 5 attempts.
+
+#### Two rate domains
+
+The system has two independent rate contracts, and conflating them throttles the wrong stage.
+
+| Domain    | Queue                  | Contract                                              | Worker                                             |
+| --------- | ---------------------- | ----------------------------------------------------- | -------------------------------------------------- |
+| Ingest    | `access-request-queue` | 300 org-wide events / 60s (`ORG_BURST_RATE_LIMIT_*`)  | `AccessRequestWorker`, limiter 300/60s             |
+| Execution | `access-grant-queue`   | 60 downstream calls / 60s (`DOWNSTREAM_RATE_LIMIT_*`) | `AccessGrantWorker`, limiter 60/60s, concurrency 2 |
+
+Ingest must absorb bursts five times wider than the downstream can serve, and it reaches no adapter, so it carries the burst ceiling. `access-grant-queue` is the buffer that absorbs the mismatch: approve enqueues, so a burst of approvals is durable in Redis instead of a wall of 500s.
+
+Ingest concurrency is derived by `concurrencyForThroughput({ ratePerWindow, windowMs, expectedJobLatencyMs })` rather than hardcoded. A limiter can only cap throughput, never raise it, so a worker with too few in-flight slots becomes the real bottleneck. At 300 jobs / 60s with ~2s RAG latency this yields 10.
+
+#### Backpressure
+
+`MockDownstreamService` enforces one **global** sliding window shared across all systems and reports `retryAfterMs` on rejection. `AccessGrantWorker` answers a rejection by calling `queue.rateLimit(retryAfterMs)` and throwing `Worker.RateLimitError()`. BullMQ recognises that error, returns the job to `wait` **without** incrementing `attemptsMade`, and pauses consumption until capacity frees. The consumer stops pulling rather than burning its retry budget, so `ACCESS_GRANT_JOB_ATTEMPTS` covers only genuine transient faults and need not outlast a full window.
+
+`EntitlementExecutionService.grant()` calls the downstream **before** upserting the entitlement, so a rejection mutates nothing and the requeue is safe. The reverse order would leave a granted entitlement in Postgres with no audit row.
 
 ### `common/`
 
@@ -447,11 +478,16 @@ The decision-engine failure tests are the notable ones — they feed the mocked 
 | `OPENAI_EMBEDDING_BATCH_SIZE`          | `64`                     | Texts per embeddings call                          |
 | `OPENAI_CHAT_MODEL`                    | `gpt-4o-mini`            | Called with `response_format: json_object`         |
 | `OPENAI_CHAT_MAX_RETRIES`              | `5`                      | Same 429 retry policy                              |
-| `DOWNSTREAM_RATE_LIMIT_MAX`            | `60`                     | Downstream contract ceiling                        |
-| `DOWNSTREAM_RATE_LIMIT_WINDOW_MS`      | `60000`                  | Window length                                      |
-| `ACCESS_REQUEST_BACKOFF_BASE_DELAY_MS` | `1000`                   | Exponential backoff base                           |
+| `DOWNSTREAM_RATE_LIMIT_MAX`            | `60`                     | Downstream contract ceiling, paces the grant queue |
+| `DOWNSTREAM_RATE_LIMIT_WINDOW_MS`      | `60000`                  | Downstream window length                           |
+| `ORG_BURST_RATE_LIMIT_MAX`             | `300`                    | Inbound org-wide event ceiling, paces ingest       |
+| `ORG_BURST_RATE_LIMIT_WINDOW_MS`       | `60000`                  | Ingest window length                               |
+| `INGEST_EXPECTED_JOB_LATENCY_MS`       | `2000`                   | Derives ingest worker concurrency                  |
+| `ACCESS_REQUEST_BACKOFF_BASE_DELAY_MS` | `1000`                   | Ingest exponential backoff base                    |
 | `ACCESS_REQUEST_BACKOFF_MAX_JITTER_MS` | `250`                    | Jitter ceiling                                     |
 | `ACCESS_REQUEST_JOB_ATTEMPTS`          | derived                  | Override only if backoff still outlasts one window |
+| `ACCESS_GRANT_BACKOFF_BASE_DELAY_MS`   | `1000`                   | Grant exponential backoff base                     |
+| `ACCESS_GRANT_JOB_ATTEMPTS`            | `5`                      | Transient faults only; rate limits cost no attempt |
 
 ### Frontend (`apps/frontend/.env`)
 

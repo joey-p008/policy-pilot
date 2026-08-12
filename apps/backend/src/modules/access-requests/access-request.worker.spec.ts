@@ -3,6 +3,10 @@ import { Job } from 'bullmq';
 import {
   DOWNSTREAM_RATE_LIMIT_MAX,
   DOWNSTREAM_RATE_LIMIT_WINDOW_MS,
+  INGEST_EXPECTED_JOB_LATENCY_MS,
+  ORG_BURST_RATE_LIMIT_MAX,
+  ORG_BURST_RATE_LIMIT_WINDOW_MS,
+  concurrencyForThroughput,
   cumulativeBackoffMs,
 } from '../../config/rate-limit.config';
 import { IdempotencyService, IdempotentResult } from '../idempotency/idempotency.service';
@@ -75,7 +79,6 @@ describe('AccessRequestWorker', () => {
     });
     expect(ACCESS_REQUEST_JOB_ATTEMPTS).toBe(8);
     expect(ACCESS_REQUEST_BACKOFF_BASE_DELAY_MS).toBe(1000);
-    expect(ACCESS_REQUEST_WORKER_CONCURRENCY).toBe(2);
   });
 
   it('sizes the retry budget to outlast one full downstream rate-limit window', () => {
@@ -84,11 +87,28 @@ describe('AccessRequestWorker', () => {
     ).toBeGreaterThanOrEqual(DOWNSTREAM_RATE_LIMIT_WINDOW_MS);
   });
 
-  it('paces the worker limiter at the downstream rate-limit contract', () => {
+  it('paces ingest at the org-wide burst ceiling, not the downstream contract', () => {
     expect(ACCESS_REQUEST_WORKER_LIMITER).toEqual({
-      max: DOWNSTREAM_RATE_LIMIT_MAX,
-      duration: DOWNSTREAM_RATE_LIMIT_WINDOW_MS,
+      max: ORG_BURST_RATE_LIMIT_MAX,
+      duration: ORG_BURST_RATE_LIMIT_WINDOW_MS,
     });
+    expect(ACCESS_REQUEST_WORKER_LIMITER.max).toBeGreaterThan(DOWNSTREAM_RATE_LIMIT_MAX);
+  });
+
+  it('keeps enough in-flight slots to actually drain the org-wide burst', () => {
+    expect(ACCESS_REQUEST_WORKER_CONCURRENCY).toBe(
+      concurrencyForThroughput({
+        ratePerWindow: ORG_BURST_RATE_LIMIT_MAX,
+        windowMs: ORG_BURST_RATE_LIMIT_WINDOW_MS,
+        expectedJobLatencyMs: INGEST_EXPECTED_JOB_LATENCY_MS,
+      }),
+    );
+
+    const drainablePerWindow =
+      (ACCESS_REQUEST_WORKER_CONCURRENCY * ORG_BURST_RATE_LIMIT_WINDOW_MS) /
+      INGEST_EXPECTED_JOB_LATENCY_MS;
+
+    expect(drainablePerWindow).toBeGreaterThanOrEqual(ORG_BURST_RATE_LIMIT_MAX);
   });
 
   it('wraps processing in IdempotencyService with a namespaced worker key', async () => {

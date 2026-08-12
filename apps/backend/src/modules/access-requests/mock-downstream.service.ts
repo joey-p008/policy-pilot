@@ -9,12 +9,20 @@ export const MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE = DOWNSTREAM_RATE_LIMIT_MAX;
 export const MOCK_DOWNSTREAM_WINDOW_MS = DOWNSTREAM_RATE_LIMIT_WINDOW_MS;
 
 export class MockDownstreamRateLimitError extends Error {
-  public constructor() {
+  /**
+   * Milliseconds until the oldest in-window call ages out and a slot frees.
+   * The grant worker forwards this to BullMQ's manual rate limit so it pauses
+   * for exactly as long as the downstream is saturated.
+   */
+  public readonly retryAfterMs: number;
+
+  public constructor(retryAfterMs: number) {
     super(
       `Mock downstream rate limit exceeded (${MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE} req / ` +
-        `${MOCK_DOWNSTREAM_WINDOW_MS}ms)`,
+        `${MOCK_DOWNSTREAM_WINDOW_MS}ms), retry after ${retryAfterMs}ms`,
     );
     this.name = 'MockDownstreamRateLimitError';
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -27,7 +35,7 @@ export class MockDownstreamService {
     this.prune(now);
 
     if (this.timestamps.length >= MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE) {
-      throw new MockDownstreamRateLimitError();
+      throw new MockDownstreamRateLimitError(this.retryAfterMs(now));
     }
 
     this.timestamps.push(now);
@@ -39,5 +47,19 @@ export class MockDownstreamService {
     while (this.timestamps.length > 0 && this.timestamps[0] < windowStart) {
       this.timestamps.shift();
     }
+  }
+
+  /**
+   * Assumes {@link prune} already ran, so the head of the array is the oldest
+   * call still occupying a slot in the sliding window.
+   */
+  private retryAfterMs(now: number): number {
+    const oldest = this.timestamps[0];
+
+    if (oldest === undefined) {
+      return 0;
+    }
+
+    return Math.max(1, oldest + MOCK_DOWNSTREAM_WINDOW_MS - now);
   }
 }
