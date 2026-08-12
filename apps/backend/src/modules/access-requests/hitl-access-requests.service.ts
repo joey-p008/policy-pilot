@@ -12,9 +12,6 @@ import type {
 import { Prisma } from '@prisma/client';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { DecisionEngineService } from '../ai/decision-engine.service';
-import { RetrievalService } from '../ai/retrieval.service';
-import type { Decision } from '../ai/schemas/recommendation.schema';
 import type { DemoPrincipal } from '../auth/demo-auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
@@ -22,43 +19,9 @@ import {
   type AccessRequestStatus,
 } from '../database/repositories/access-request.repository';
 import { EntitlementRepository } from '../database/repositories/entitlement.repository';
+import { AccessRecommendationService } from './access-recommendation.service';
 import type { CreateHitlAccessRequestDto } from './dto/hitl-access-requests.dto';
 import { SEED_REQUESTOR_USER_ID } from './seed-ids';
-
-function mapDecisionToRecommendation(
-  decision: Decision,
-  chunks: Array<{
-    document_id: string;
-    page_number: number;
-    section_title: string;
-    content: string;
-  }>,
-): AccessRecommendation {
-  const contentByKey = new Map(
-    chunks.map((chunk) => [
-      `${chunk.document_id}|${chunk.page_number}|${chunk.section_title}`,
-      chunk.content,
-    ]),
-  );
-
-  const policyCitations: PolicyCitation[] = decision.policy_citations.map((citation) => {
-    const key = `${citation.document_id}|${citation.page_number}|${citation.section_title}`;
-    const content = contentByKey.get(key);
-    return {
-      documentId: citation.document_id,
-      pageNumber: citation.page_number,
-      sectionTitle: citation.section_title,
-      ...(content !== undefined ? { content } : {}),
-    };
-  });
-
-  return {
-    decision: decision.decision,
-    rationale: decision.rationale,
-    confidenceScore: decision.confidence_score,
-    policyCitations,
-  };
-}
 
 function parseStoredRecommendation(value: Prisma.JsonValue): AccessRecommendation {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -118,8 +81,7 @@ export class HitlAccessRequestsService {
   public constructor(
     private readonly accessRequestRepository: AccessRequestRepository,
     private readonly entitlementRepository: EntitlementRepository,
-    private readonly retrievalService: RetrievalService,
-    private readonly decisionEngineService: DecisionEngineService,
+    private readonly accessRecommendationService: AccessRecommendationService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
@@ -127,63 +89,18 @@ export class HitlAccessRequestsService {
     dto: CreateHitlAccessRequestDto,
     principal: DemoPrincipal,
   ): Promise<PendingAccessRequest> {
-    const requestId = randomUUID();
-    const employeeId = principal.employeeId;
-
-    const entitlements = await this.entitlementRepository.findByUserId(principal.userId);
-    const currentEntitlements = entitlements.map(
-      (entitlement) => `${entitlement.resourceName}:${entitlement.permissionLevel}`,
-    );
-
-    const policyChunks = await this.retrievalService.retrieve({
-      requestId,
-      targetEntitlement: dto.targetEntitlement,
+    return this.accessRecommendationService.createWithRecommendation({
+      requestId: randomUUID(),
+      employeeId: principal.employeeId,
+      actorUserId: principal.userId,
+      entitlementUserId: principal.userId,
+      title: dto.title,
+      department: dto.department,
+      costCenter: dto.costCenter,
+      systemName: dto.systemName,
+      entitlementKey: dto.entitlementKey,
       justification: dto.justification,
-      currentEntitlements,
     });
-
-    const decision = await this.decisionEngineService.decide({
-      request: {
-        requestId,
-        targetEntitlement: dto.targetEntitlement,
-        justification: dto.justification,
-        currentEntitlements,
-      },
-      policyChunks,
-    });
-
-    const recommendation = mapDecisionToRecommendation(decision, policyChunks);
-
-    await this.accessRequestRepository.create({
-      requestId,
-      employeeId,
-      targetEntitlement: dto.targetEntitlement,
-      justification: dto.justification,
-      status: ACCESS_REQUEST_STATUS.PENDING_REVIEW,
-      recommendationJson: recommendation as unknown as Prisma.InputJsonValue,
-    });
-
-    await this.auditLogService.append({
-      requestId,
-      actorId: principal.userId,
-      action: 'RECOMMENDATION_CREATED',
-      previousState: { status: null },
-      newState: {
-        status: ACCESS_REQUEST_STATUS.PENDING_REVIEW,
-        employee_id: employeeId,
-        targetEntitlement: dto.targetEntitlement,
-        recommendation: recommendation.decision,
-      },
-    });
-
-    return {
-      requestId,
-      employeeId,
-      targetEntitlement: dto.targetEntitlement,
-      justification: dto.justification,
-      currentEntitlements,
-      recommendation,
-    };
   }
 
   public async listPending(): Promise<PendingAccessRequest[]> {
@@ -196,6 +113,10 @@ export class HitlAccessRequestsService {
     return rows.map((row) => ({
       requestId: row.requestId,
       employeeId: row.employeeId,
+      title: row.title,
+      department: row.department,
+      costCenter: row.costCenter,
+      systemName: row.systemName,
       targetEntitlement: row.targetEntitlement,
       justification: row.justification,
       currentEntitlements,
@@ -213,6 +134,10 @@ export class HitlAccessRequestsService {
     return rows.map((row) => ({
       requestId: row.requestId,
       employeeId: row.employeeId,
+      title: row.title,
+      department: row.department,
+      costCenter: row.costCenter,
+      systemName: row.systemName,
       targetEntitlement: row.targetEntitlement,
       justification: row.justification,
       currentEntitlements,

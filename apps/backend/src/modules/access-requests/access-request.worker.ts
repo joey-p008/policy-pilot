@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 
 import { IdempotencyService, IdempotentResult } from '../idempotency/idempotency.service';
+import { AccessRecommendationService } from './access-recommendation.service';
 import {
   ACCESS_REQUEST_QUEUE,
   ACCESS_REQUEST_WORKER_CONCURRENCY,
@@ -32,6 +33,7 @@ export class AccessRequestWorker extends WorkerHost {
   public constructor(
     private readonly idempotencyService: IdempotencyService,
     private readonly mockDownstream: MockDownstreamService,
+    private readonly accessRecommendationService: AccessRecommendationService,
   ) {
     super();
   }
@@ -40,14 +42,15 @@ export class AccessRequestWorker extends WorkerHost {
     job: Job<AccessRequestDto>,
   ): Promise<IdempotentResult<AccessRequestProcessedResponse>> {
     const result = await this.idempotencyService.executeIdempotent({
-      requestId: buildWorkerIdempotencyRequestId(job.data.requestId),
+      requestId: buildWorkerIdempotencyRequestId(job.data.request_id),
       endpoint: ACCESS_REQUEST_WORKER_ENDPOINT,
       execute: async (): Promise<AccessRequestProcessedResponse> => {
+        await this.accessRecommendationService.createFromWebhook(job.data);
         await this.mockDownstream.invoke();
 
         return {
           status: 'processed',
-          requestId: job.data.requestId,
+          requestId: job.data.request_id,
         };
       },
     });

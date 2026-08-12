@@ -19,3 +19,6 @@ export const SEED_ENTITLEMENT_A_ID = 'a36e7537-953c-423e-9dd3-b6fa2edc6d4a';
 export const SEED_ENTITLEMENT_B_ID = '5b871d1a-fc1c-4914-9c00-81a988cdfbdd';
 export const SEED_AUDIT_A_ID = '82584cee-6bae-40dd-b620-e16c4613e06d';
 export const SEED_AUDIT_B_ID = 'eebf80a0-e331-429f-9365-39ba90267a95';
+
+/** System actor used when webhook ingest cannot resolve a user for audit FK. */
+export const SEED_SYSTEM_INGEST_USER_ID = '9e8d7c6b-5a49-4f3e-8d2c-1b0a9f8e7d6c';

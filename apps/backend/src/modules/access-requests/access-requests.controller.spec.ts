@@ -50,9 +50,20 @@ describe('AccessRequestsController', () => {
     const response = await request(app.getHttpServer())
       .post('/webhooks/access-requests')
       .send({
-        requestId: 'req-100',
-        employeeId: 'emp-42',
-        targetEntitlement: 'vpn-access',
+        request_id: 'req-100',
+        employee_id: 'emp-42',
+        request_type: 'GRANT_ENTITLEMENT',
+        timestamp: '2026-07-01T09:15:00Z',
+        requester: {
+          title: 'Data Analyst',
+          department: 'Finance Analytics',
+          cost_center: 'CC-FIN-07',
+        },
+        target: {
+          system_name: 'DATA_WAREHOUSE',
+          entitlement_key: 'FIN_DATASET_EDIT',
+          justification: 'Need to build quarterly revenue models.',
+        },
       })
       .expect(202);
 
@@ -60,9 +71,20 @@ describe('AccessRequestsController', () => {
     expect(response.body.response.statusUrl).toMatch(/^\/access-requests\/[^/]+\/status$/);
     expect(handleIncoming).toHaveBeenCalledTimes(1);
     expect(handleIncoming).toHaveBeenCalledWith({
-      requestId: 'req-100',
-      employeeId: 'emp-42',
-      targetEntitlement: 'vpn-access',
+      request_id: 'req-100',
+      employee_id: 'emp-42',
+      request_type: 'GRANT_ENTITLEMENT',
+      timestamp: '2026-07-01T09:15:00Z',
+      requester: {
+        title: 'Data Analyst',
+        department: 'Finance Analytics',
+        cost_center: 'CC-FIN-07',
+      },
+      target: {
+        system_name: 'DATA_WAREHOUSE',
+        entitlement_key: 'FIN_DATASET_EDIT',
+        justification: 'Need to build quarterly revenue models.',
+      },
     });
   });
 
@@ -70,9 +92,20 @@ describe('AccessRequestsController', () => {
     const response = await request(app.getHttpServer())
       .post('/webhooks/access-requests')
       .send({
-        requestId: '',
-        employeeId: 'emp-42',
-        targetEntitlement: 'vpn-access',
+        request_id: '',
+        employee_id: 'emp-42',
+        request_type: 'GRANT_ENTITLEMENT',
+        timestamp: '2026-07-01T09:15:00Z',
+        requester: {
+          title: 'Data Analyst',
+          department: 'Finance Analytics',
+          cost_center: 'CC-FIN-07',
+        },
+        target: {
+          system_name: 'DATA_WAREHOUSE',
+          entitlement_key: 'FIN_DATASET_EDIT',
+          justification: 'Need to build quarterly revenue models.',
+        },
       })
       .expect(400);
 
@@ -81,7 +114,7 @@ describe('AccessRequestsController', () => {
         message: 'Validation failed',
         errors: expect.objectContaining({
           fieldErrors: expect.objectContaining({
-            requestId: expect.arrayContaining([expect.any(String)]),
+            request_id: expect.arrayContaining([expect.any(String)]),
           }),
         }),
       }),
@@ -93,7 +126,7 @@ describe('AccessRequestsController', () => {
     await request(app.getHttpServer())
       .post('/webhooks/access-requests')
       .send({
-        employeeId: 'emp-42',
+        employee_id: 'emp-42',
       })
       .expect(400);
 

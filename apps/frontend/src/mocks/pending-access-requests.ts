@@ -13,6 +13,10 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
   {
     requestId: 'req-rag-deny-001',
     employeeId: 'emp-hashed-042',
+    title: 'Site Reliability Engineer',
+    department: 'Platform Engineering',
+    costCenter: 'CC-ENG-12',
+    systemName: 'DATA_WAREHOUSE',
     targetEntitlement: 'prod-postgres-admin',
     justification: 'Need production admin to restart a failed migration job.',
     currentEntitlements: ['prod-postgres-read', 'staging-postgres-write'],
@@ -42,6 +46,10 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
   {
     requestId: 'req-rag-escalate-002',
     employeeId: 'emp-hashed-117',
+    title: 'Data Analyst',
+    department: 'Finance Analytics',
+    costCenter: 'CC-FIN-07',
+    systemName: 'DATA_WAREHOUSE',
     targetEntitlement: 'analytics-warehouse-writer',
     justification: 'Quarterly reporting needs write access to the analytics warehouse.',
     currentEntitlements: ['analytics-warehouse-reader'],
@@ -74,6 +82,10 @@ export const MOCK_HISTORY_ACCESS_REQUESTS: AccessRequestHistoryItem[] = [
   {
     requestId: 'req-hist-approved-001',
     employeeId: 'E-MOCK-042',
+    title: 'Data Analyst',
+    department: 'Finance Analytics',
+    costCenter: 'CC-FIN-07',
+    systemName: 'DATA_WAREHOUSE',
     targetEntitlement: 'analytics-dashboard-reader',
     justification: 'Need read access for Q2 dashboard reviews.',
     currentEntitlements: ['prod-postgres-read'],
@@ -152,7 +164,7 @@ function assertAdminRole(): void {
 function buildMockRecommendation(
   payload: CreateAccessRequestPayload,
 ): PendingAccessRequest['recommendation'] {
-  const lowered = `${payload.targetEntitlement} ${payload.justification}`.toLowerCase();
+  const lowered = `${payload.entitlementKey} ${payload.justification}`.toLowerCase();
   let decision: RecommendationDecision = 'ESCALATE';
   let confidenceScore = 0.42;
   let rationale =
@@ -220,7 +232,11 @@ export function createMockAccessRequest(payload: CreateAccessRequestPayload): Pe
   const created: PendingAccessRequest = {
     requestId: `req-mock-${Date.now()}`,
     employeeId: identity.role === 'admin' ? 'E-MOCK-ADMIN' : 'E-MOCK-042',
-    targetEntitlement: payload.targetEntitlement,
+    title: payload.title,
+    department: payload.department,
+    costCenter: payload.costCenter,
+    systemName: payload.systemName,
+    targetEntitlement: payload.entitlementKey,
     justification: payload.justification,
     currentEntitlements: ['prod-postgres-read'],
     recommendation: buildMockRecommendation(payload),

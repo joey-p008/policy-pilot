@@ -2,16 +2,24 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { AccessRequest } from '@prisma/client';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { DecisionEngineService } from '../ai/decision-engine.service';
-import { RetrievalService } from '../ai/retrieval.service';
 import { DEMO_PRINCIPALS } from '../auth/demo-auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
   AccessRequestRepository,
 } from '../database/repositories/access-request.repository';
 import { EntitlementRepository } from '../database/repositories/entitlement.repository';
+import { AccessRecommendationService } from './access-recommendation.service';
 import { HitlAccessRequestsService } from './hitl-access-requests.service';
 import { SEED_REQUESTOR_EMPLOYEE_ID } from './seed-ids';
+
+const hitlCreateDto = {
+  title: 'Data Analyst',
+  department: 'Finance Analytics',
+  costCenter: 'CC-FIN-07',
+  systemName: 'DATA_WAREHOUSE',
+  entitlementKey: 'prod-postgres-admin',
+  justification: 'Need admin for incident response',
+};
 
 describe('HitlAccessRequestsService', () => {
   const mockAccessRequestRepository: jest.Mocked<
@@ -31,12 +39,10 @@ describe('HitlAccessRequestsService', () => {
     findByUserId: jest.fn(),
   };
 
-  const mockRetrievalService: jest.Mocked<Pick<RetrievalService, 'retrieve'>> = {
-    retrieve: jest.fn(),
-  };
-
-  const mockDecisionEngineService: jest.Mocked<Pick<DecisionEngineService, 'decide'>> = {
-    decide: jest.fn(),
+  const mockAccessRecommendationService: jest.Mocked<
+    Pick<AccessRecommendationService, 'createWithRecommendation'>
+  > = {
+    createWithRecommendation: jest.fn(),
   };
 
   const mockAuditLogService: jest.Mocked<Pick<AuditLogService, 'append'>> = {
@@ -50,8 +56,7 @@ describe('HitlAccessRequestsService', () => {
     service = new HitlAccessRequestsService(
       mockAccessRequestRepository as unknown as AccessRequestRepository,
       mockEntitlementRepository as unknown as EntitlementRepository,
-      mockRetrievalService as unknown as RetrievalService,
-      mockDecisionEngineService as unknown as DecisionEngineService,
+      mockAccessRecommendationService as unknown as AccessRecommendationService,
       mockAuditLogService as unknown as AuditLogService,
     );
 
@@ -66,61 +71,40 @@ describe('HitlAccessRequestsService', () => {
     ]);
   });
 
-  it('creates a pending request with RAG recommendation mapped to camelCase', async () => {
-    mockRetrievalService.retrieve.mockResolvedValue([
-      {
-        document_id: 'POL-2026-02',
-        page_number: 4,
-        section_title: 'Privileged Access',
-        content: 'Production admin requires an approved change ticket.',
+  it('delegates HITL create to the shared recommendation orchestrator', async () => {
+    mockAccessRecommendationService.createWithRecommendation.mockResolvedValue({
+      requestId: 'req-1',
+      employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
+      title: hitlCreateDto.title,
+      department: hitlCreateDto.department,
+      costCenter: hitlCreateDto.costCenter,
+      systemName: hitlCreateDto.systemName,
+      targetEntitlement: hitlCreateDto.entitlementKey,
+      justification: hitlCreateDto.justification,
+      currentEntitlements: ['payroll-api:read'],
+      recommendation: {
+        decision: 'DENY',
+        rationale: 'Missing change ticket.',
+        confidenceScore: 0.9,
+        policyCitations: [],
       },
-    ]);
-    mockDecisionEngineService.decide.mockResolvedValue({
-      decision: 'DENY',
-      rationale: 'Missing change ticket.',
-      confidence_score: 0.9,
-      policy_citations: [
-        {
-          document_id: 'POL-2026-02',
-          page_number: 4,
-          section_title: 'Privileged Access',
-        },
-      ],
     });
-    mockAccessRequestRepository.create.mockResolvedValue({} as AccessRequest);
-    mockAuditLogService.append.mockResolvedValue({} as never);
 
-    const result = await service.createWithRecommendation(
-      {
-        targetEntitlement: 'prod-postgres-admin',
-        justification: 'Need admin for incident response',
-      },
-      DEMO_PRINCIPALS.user,
-    );
+    const result = await service.createWithRecommendation(hitlCreateDto, DEMO_PRINCIPALS.user);
 
     expect(result.employeeId).toBe(SEED_REQUESTOR_EMPLOYEE_ID);
-    expect(result.justification).toBe('Need admin for incident response');
-    expect(result.currentEntitlements).toEqual(['payroll-api:read']);
-    expect(result.recommendation).toEqual({
-      decision: 'DENY',
-      rationale: 'Missing change ticket.',
-      confidenceScore: 0.9,
-      policyCitations: [
-        {
-          documentId: 'POL-2026-02',
-          pageNumber: 4,
-          sectionTitle: 'Privileged Access',
-          content: 'Production admin requires an approved change ticket.',
-        },
-      ],
-    });
-    expect(mockEntitlementRepository.findByUserId).toHaveBeenCalledWith(
-      DEMO_PRINCIPALS.user.userId,
-    );
-    expect(mockAuditLogService.append).toHaveBeenCalledWith(
+    expect(result.targetEntitlement).toBe('prod-postgres-admin');
+    expect(mockAccessRecommendationService.createWithRecommendation).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'RECOMMENDATION_CREATED',
-        actorId: DEMO_PRINCIPALS.user.userId,
+        employeeId: DEMO_PRINCIPALS.user.employeeId,
+        actorUserId: DEMO_PRINCIPALS.user.userId,
+        entitlementUserId: DEMO_PRINCIPALS.user.userId,
+        title: hitlCreateDto.title,
+        department: hitlCreateDto.department,
+        costCenter: hitlCreateDto.costCenter,
+        systemName: hitlCreateDto.systemName,
+        entitlementKey: hitlCreateDto.entitlementKey,
+        justification: hitlCreateDto.justification,
       }),
     );
   });
@@ -196,6 +180,10 @@ describe('HitlAccessRequestsService', () => {
       {
         requestId: 'req-hist-1',
         employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
+        title: 'Data Analyst',
+        department: 'Finance Analytics',
+        costCenter: 'CC-FIN-07',
+        systemName: 'DATA_WAREHOUSE',
         targetEntitlement: 'prod-postgres-admin',
         justification: 'Need access',
         status: ACCESS_REQUEST_STATUS.APPROVED,
@@ -216,6 +204,8 @@ describe('HitlAccessRequestsService', () => {
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
       requestId: 'req-hist-1',
+      title: 'Data Analyst',
+      systemName: 'DATA_WAREHOUSE',
       status: 'APPROVED',
       decidedAt: decidedAt.toISOString(),
       decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,

@@ -7,6 +7,8 @@ import { App } from 'supertest/types';
 import { z } from 'zod';
 
 import { AppModule } from '../src/app.module';
+import { DecisionEngineService } from '../src/modules/ai/decision-engine.service';
+import { RetrievalService } from '../src/modules/ai/retrieval.service';
 import {
   ACCESS_REQUEST_JOB_ATTEMPTS,
   ACCESS_REQUEST_JOB_NAME,
@@ -16,6 +18,7 @@ import {
   buildWorkerIdempotencyRequestId,
 } from '../src/modules/access-requests/access-requests.constants';
 import { AccessRequestDto } from '../src/modules/access-requests/dto/access-requests.dto';
+import { SEED_SYSTEM_INGEST_USER_ID } from '../src/modules/access-requests/seed-ids';
 import {
   MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE,
   MockDownstreamRateLimitError,
@@ -108,9 +111,20 @@ describe('Access request webhook burst ingestion (integration)', () => {
   const redeliveryJobId = `${runId}-redelivery`;
 
   const buildDto = (requestId: string): AccessRequestDto => ({
-    requestId,
-    employeeId: `emp-${requestId}`,
-    targetEntitlement: 'vpn-access',
+    request_id: requestId,
+    employee_id: `emp-${requestId}`,
+    request_type: 'GRANT_ENTITLEMENT',
+    timestamp: '2026-07-01T09:15:00Z',
+    requester: {
+      title: 'Data Analyst',
+      department: 'Finance Analytics',
+      cost_center: 'CC-FIN-07',
+    },
+    target: {
+      system_name: 'DATA_WAREHOUSE',
+      entitlement_key: 'FIN_DATASET_EDIT',
+      justification: 'Need to build quarterly revenue models.',
+    },
   });
 
   async function postWebhook(dto: AccessRequestDto): Promise<WebhookOutcome> {
@@ -123,7 +137,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
       .send(dto);
 
     return {
-      requestId: dto.requestId,
+      requestId: dto.request_id,
       status: response.status,
       body: response.body,
     };
@@ -190,7 +204,21 @@ describe('Access request webhook burst ingestion (integration)', () => {
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(RetrievalService)
+      .useValue({
+        retrieve: jest.fn().mockResolvedValue([]),
+      })
+      .overrideProvider(DecisionEngineService)
+      .useValue({
+        decide: jest.fn().mockResolvedValue({
+          decision: 'ESCALATE',
+          rationale: 'Burst integration stub recommendation.',
+          confidence_score: 0.2,
+          policy_citations: [],
+        }),
+      })
+      .compile();
 
     const activeApp = moduleRef.createNestApplication<INestApplication<App>>();
     await activeApp.init();
@@ -204,6 +232,19 @@ describe('Access request webhook burst ingestion (integration)', () => {
     queue = activeQueue;
 
     await activePrisma.idempotencyKey.deleteMany({ where: { requestId: { contains: runId } } });
+    await activePrisma.accessAuditLog.deleteMany({ where: { requestId: { contains: runId } } });
+    await activePrisma.accessRequest.deleteMany({ where: { requestId: { contains: runId } } });
+    await activePrisma.user.upsert({
+      where: { id: SEED_SYSTEM_INGEST_USER_ID },
+      create: {
+        id: SEED_SYSTEM_INGEST_USER_ID,
+        employeeIdHash: 'b22b2222bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        department: 'Platform',
+        costCenterHash: 'd02c81895847a0671a5ad9621989da8ec6ef82174e0ab2b20936a8648b40ec55',
+        role: 'system_ingest',
+      },
+      update: {},
+    });
 
     const downstream = activeApp.get(MockDownstreamService);
     const realInvoke = downstream.invoke.bind(downstream);
@@ -294,6 +335,8 @@ describe('Access request webhook burst ingestion (integration)', () => {
     try {
       if (prisma !== undefined) {
         await prisma.idempotencyKey.deleteMany({ where: { requestId: { contains: runId } } });
+        await prisma.accessAuditLog.deleteMany({ where: { requestId: { contains: runId } } });
+        await prisma.accessRequest.deleteMany({ where: { requestId: { contains: runId } } });
       }
 
       if (queue !== undefined) {

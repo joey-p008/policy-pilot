@@ -58,6 +58,7 @@ const GoldenScenarioSchema = z.object({
     department: z.string().min(1),
     target_resource: z.string().min(1),
     requested_entitlement: z.string().min(1),
+    title: z.string().min(1),
     current_entitlements: z.array(z.string()),
   }),
   // Empty arrays are valid for adversarial / non-retrieval scenarios (e.g. prompt injection).
@@ -207,6 +208,7 @@ function citationKey(chunk: {
 
 function buildScenarioContext(scenario: GoldenScenario): {
   readonly justification: string;
+  readonly title: string;
   readonly costCenter: string;
   readonly department: string;
   readonly targetResource: string;
@@ -214,6 +216,7 @@ function buildScenarioContext(scenario: GoldenScenario): {
 } {
   return {
     justification: scenario.description,
+    title: scenario.webhook_input.title,
     costCenter: scenario.webhook_input.cost_center,
     department: scenario.webhook_input.department,
     targetResource: scenario.webhook_input.target_resource,
@@ -313,6 +316,7 @@ async function runDecisionEngine(params: {
   readonly requestId: string;
   readonly targetEntitlement: string;
   readonly justification: string;
+  readonly title: string;
   readonly costCenter: string;
   readonly department: string;
   readonly targetResource: string;
@@ -328,10 +332,13 @@ async function runDecisionEngine(params: {
     access_request: {
       request_id: params.requestId,
       target_entitlement: params.targetEntitlement,
+      entitlement_key: params.targetEntitlement,
       justification: params.justification,
+      title: params.title,
       department: params.department,
       cost_center: params.costCenter,
       target_resource: params.targetResource,
+      system_name: params.targetResource,
       current_entitlements: params.currentEntitlements,
     },
     policy_chunks: params.policyChunks,
@@ -383,6 +390,7 @@ async function evaluateScenario(params: {
       requestId: scenario.webhook_input.request_id,
       targetEntitlement: scenario.webhook_input.requested_entitlement,
       justification: context.justification,
+      title: context.title,
       costCenter: context.costCenter,
       department: context.department,
       targetResource: context.targetResource,
@@ -395,6 +403,7 @@ async function evaluateScenario(params: {
         requestId: scenario.webhook_input.request_id,
         targetEntitlement: scenario.webhook_input.requested_entitlement,
         justification: context.justification,
+        title: context.title,
         costCenter: context.costCenter,
         department: context.department,
         targetResource: context.targetResource,

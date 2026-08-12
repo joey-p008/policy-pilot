@@ -34,11 +34,11 @@ export class AccessRequestsService {
 
   public async handleIncoming(dto: AccessRequestDto): Promise<AccessRequestHandleResult> {
     return this.idempotencyService.executeIdempotent({
-      requestId: dto.requestId,
+      requestId: dto.request_id,
       endpoint: ACCESS_REQUESTS_WEBHOOK_ENDPOINT,
       execute: async (): Promise<AccessRequestAcceptedResponse> => {
         await this.accessRequestQueue.add(ACCESS_REQUEST_JOB_NAME, dto, {
-          jobId: dto.requestId,
+          jobId: dto.request_id,
           attempts: ACCESS_REQUEST_JOB_ATTEMPTS,
           backoff: {
             type: 'exponential',
@@ -48,8 +48,8 @@ export class AccessRequestsService {
 
         return {
           status: 'accepted',
-          requestId: dto.requestId,
-          statusUrl: buildAccessRequestStatusUrl(dto.requestId),
+          requestId: dto.request_id,
+          statusUrl: buildAccessRequestStatusUrl(dto.request_id),
         };
       },
     });

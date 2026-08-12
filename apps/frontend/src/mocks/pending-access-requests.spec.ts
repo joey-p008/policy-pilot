@@ -28,7 +28,11 @@ describe('pending-access-requests mock store', () => {
 
   it('creates a mock request with a heuristic recommendation and prepends it', () => {
     const created = createMockAccessRequest({
-      targetEntitlement: 'prod-postgres-admin',
+      title: 'Site Reliability Engineer',
+      department: 'Platform Engineering',
+      costCenter: 'CC-ENG-12',
+      systemName: 'DATA_WAREHOUSE',
+      entitlementKey: 'prod-postgres-admin',
       justification: 'Need admin for an incident',
     });
 

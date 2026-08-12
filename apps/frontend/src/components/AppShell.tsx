@@ -3,6 +3,7 @@ import type { JSX } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { useDemoRole } from '../context/DemoRoleContext';
+import { useRequesterProfile } from '../context/RequesterProfileContext';
 
 function navClassName({ isActive }: { isActive: boolean }): string {
   return [
@@ -13,6 +14,7 @@ function navClassName({ isActive }: { isActive: boolean }): string {
 
 export function AppShell(): JSX.Element {
   const { role, setRole, isAdmin, identity } = useDemoRole();
+  const { profile } = useRequesterProfile();
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
@@ -46,6 +48,15 @@ export function AppShell(): JSX.Element {
             </nav>
 
             <div className="flex flex-wrap items-center gap-3">
+              {profile !== null ? (
+                <p className="text-xs text-slate-400">
+                  {profile.title} · {profile.department} ·{' '}
+                  <span className="font-mono text-slate-200">{profile.costCenter}</span>
+                </p>
+              ) : null}
+              <NavLink to="/profile" className={navClassName}>
+                Profile
+              </NavLink>
               <p className="text-xs text-slate-400">
                 Acting as <span className="font-mono text-slate-200">{identity.actorId}</span> (
                 {role})

@@ -19,6 +19,8 @@ const IDS = {
   userB: '041aa56a-3752-44ec-a157-436d4f30328f',
   /** Stable HITL admin actor mapped from API admin_id "admin-123". */
   adminUser: 'f1c2a3b4-5d6e-4789-a012-3456789abcde',
+  /** System actor for webhook ingest when employee_id does not match a user. */
+  systemIngestUser: '9e8d7c6b-5a49-4f3e-8d2c-1b0a9f8e7d6c',
   entitlementA: 'a36e7537-953c-423e-9dd3-b6fa2edc6d4a',
   entitlementB: '5b871d1a-fc1c-4914-9c00-81a988cdfbdd',
   auditA: '82584cee-6bae-40dd-b620-e16c4613e06d',
@@ -76,6 +78,23 @@ async function main(): Promise<void> {
       department: 'Security',
       costCenterHash: HASHES.costCenter200,
       role: 'hitl_admin',
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { id: IDS.systemIngestUser },
+    create: {
+      id: IDS.systemIngestUser,
+      employeeIdHash: 'b22b2222bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      department: 'Platform',
+      costCenterHash: HASHES.costCenter100,
+      role: 'system_ingest',
+    },
+    update: {
+      employeeIdHash: 'b22b2222bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      department: 'Platform',
+      costCenterHash: HASHES.costCenter100,
+      role: 'system_ingest',
     },
   });
 

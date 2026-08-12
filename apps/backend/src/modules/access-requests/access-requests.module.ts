@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { AccessRecommendationService } from './access-recommendation.service';
 import { AccessRequestWorker } from './access-request.worker';
 import { AccessRequestsHitlController } from './access-requests-hitl.controller';
 import {
@@ -29,9 +30,10 @@ import { MockDownstreamService } from './mock-downstream.service';
   providers: [
     AccessRequestsService,
     HitlAccessRequestsService,
+    AccessRecommendationService,
     AccessRequestWorker,
     MockDownstreamService,
   ],
-  exports: [AccessRequestsService, HitlAccessRequestsService],
+  exports: [AccessRequestsService, HitlAccessRequestsService, AccessRecommendationService],
 })
 export class AccessRequestsModule {}

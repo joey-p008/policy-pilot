@@ -182,7 +182,7 @@ describe('HitlReviewPage', () => {
     expect(screen.getByText('prod-postgres-read')).toBeInTheDocument();
     expect(screen.getByText('staging-postgres-write')).toBeInTheDocument();
     expect(screen.getByText('Requested permission')).toBeInTheDocument();
-    expect(screen.getAllByText('prod-postgres-admin').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('DATA_WAREHOUSE / prod-postgres-admin').length).toBeGreaterThan(0);
     expect(
       screen.getByText('Need production admin to restart a failed migration job.'),
     ).toBeInTheDocument();
