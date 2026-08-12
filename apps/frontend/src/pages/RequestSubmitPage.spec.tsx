@@ -78,7 +78,7 @@ describe('RequestSubmitPage', () => {
       target: { value: 'DATA_WAREHOUSE' },
     });
     fireEvent.change(screen.getByLabelText('Entitlement key'), {
-      target: { value: 'FIN_DATASET_EDIT' },
+      target: { value: 'FIN_DATASET_READ' },
     });
     fireEvent.change(screen.getByPlaceholderText('Explain why this access is needed…'), {
       target: { value: 'Quarterly reporting pipeline' },
@@ -90,7 +90,7 @@ describe('RequestSubmitPage', () => {
       department: 'Finance Analytics',
       costCenter: 'CC-FIN-07',
       systemName: 'DATA_WAREHOUSE',
-      entitlementKey: 'FIN_DATASET_EDIT',
+      entitlementKey: 'FIN_DATASET_READ',
       justification: 'Quarterly reporting pipeline',
     });
   });
