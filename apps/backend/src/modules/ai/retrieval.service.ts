@@ -8,6 +8,7 @@ import {
 import { PolicyDocumentChunk, PolicyDocumentChunkSchema } from './dto/document-ingestion.dto';
 import { EMBEDDING_CLIENT, EMBEDDING_DIMENSIONS } from './embedding/embedding.types';
 import type { EmbeddingClient } from './embedding/embedding.types';
+import { resolvePolicyDocumentPrefix } from './system-policy-document-prefix';
 
 export const RETRIEVAL_TOP_K = 4;
 
@@ -47,7 +48,12 @@ export class RetrievalService {
       );
     }
 
-    const rows = await this.policyChunkRepository.findTopSimilar(embedding, RETRIEVAL_TOP_K);
+    const documentIdPrefix = resolvePolicyDocumentPrefix(validatedRequest.targetResource ?? '');
+    const rows = await this.policyChunkRepository.findTopSimilar(
+      embedding,
+      RETRIEVAL_TOP_K,
+      documentIdPrefix === undefined ? undefined : { documentIdPrefix },
+    );
     return rows.map((row) => this.toPolicyDocumentChunk(row));
   }
 

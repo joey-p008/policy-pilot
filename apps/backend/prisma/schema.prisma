@@ -27,6 +27,7 @@ model Entitlement {
   expiresAt       DateTime? @map("expires_at")
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, resourceName, permissionLevel], map: "entitlements_user_resource_permission_key")
   @@index([userId])
   @@map("entitlements")
 }

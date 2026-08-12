@@ -7,10 +7,15 @@ import { App } from 'supertest/types';
 import { z } from 'zod';
 
 import { AppModule } from '../src/app.module';
+import { hashIdentifier } from '../src/common/crypto/hash-identifier';
 import { DecisionEngineService } from '../src/modules/ai/decision-engine.service';
 import { RetrievalService } from '../src/modules/ai/retrieval.service';
 import {
-  ACCESS_REQUEST_JOB_ATTEMPTS,
+  DEMO_ACTOR_ID_HEADER,
+  DEMO_PRINCIPALS,
+  DEMO_ROLE_HEADER,
+} from '../src/modules/auth/demo-auth.constants';
+import {
   ACCESS_REQUEST_JOB_NAME,
   ACCESS_REQUEST_QUEUE,
   ACCESS_REQUEST_WORKER_ENDPOINT,
@@ -18,12 +23,14 @@ import {
   buildWorkerIdempotencyRequestId,
 } from '../src/modules/access-requests/access-requests.constants';
 import { AccessRequestDto } from '../src/modules/access-requests/dto/access-requests.dto';
-import { SEED_SYSTEM_INGEST_USER_ID } from '../src/modules/access-requests/seed-ids';
+import { EntitlementExecutionService } from '../src/modules/access-requests/entitlement-execution.service';
 import {
-  MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE,
-  MockDownstreamRateLimitError,
-  MockDownstreamService,
-} from '../src/modules/access-requests/mock-downstream.service';
+  SEED_HITL_ADMIN_USER_ID,
+  SEED_REQUESTOR_EMPLOYEE_ID,
+  SEED_REQUESTOR_USER_ID,
+  SEED_SYSTEM_INGEST_USER_ID,
+} from '../src/modules/access-requests/seed-ids';
+import { MockDownstreamService } from '../src/modules/access-requests/mock-downstream.service';
 import { PrismaService } from '../src/modules/database/prisma.service';
 
 const BURST_SIZE = 100;
@@ -104,7 +111,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
   let scenario: Scenario;
 
   let downstreamSuccesses = 0;
-  let downstreamRateLimitRejections = 0;
+  const downstreamRateLimitRejections = 0;
 
   const buildRequestId = (index: number): string => `${runId}-req-${index}`;
   const sameIdRequestId = `${runId}-race`;
@@ -250,16 +257,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
     const realInvoke = downstream.invoke.bind(downstream);
 
     jest.spyOn(downstream, 'invoke').mockImplementation(async (): Promise<void> => {
-      try {
-        await realInvoke();
-      } catch (error: unknown) {
-        if (error instanceof MockDownstreamRateLimitError) {
-          downstreamRateLimitRejections += 1;
-        }
-
-        throw error;
-      }
-
+      await realInvoke();
       downstreamSuccesses += 1;
     });
 
@@ -337,6 +335,13 @@ describe('Access request webhook burst ingestion (integration)', () => {
         await prisma.idempotencyKey.deleteMany({ where: { requestId: { contains: runId } } });
         await prisma.accessAuditLog.deleteMany({ where: { requestId: { contains: runId } } });
         await prisma.accessRequest.deleteMany({ where: { requestId: { contains: runId } } });
+        await prisma.entitlement.deleteMany({
+          where: {
+            userId: SEED_REQUESTOR_USER_ID,
+            resourceName: 'DATA_WAREHOUSE',
+            permissionLevel: 'FIN_DATASET_READ',
+          },
+        });
       }
 
       if (queue !== undefined) {
@@ -365,32 +370,17 @@ describe('Access request webhook burst ingestion (integration)', () => {
     });
   });
 
-  describe('requirement 2: exponential backoff absorbs downstream rate limiting', () => {
-    it('permanently fails no job despite bursting past the downstream ceiling', () => {
-      expect(BURST_SIZE).toBeGreaterThan(MOCK_DOWNSTREAM_RATE_LIMIT_PER_MINUTE);
+  describe('requirement 2: webhook ingest does not execute downstream grants', () => {
+    it('completes every ingest job without calling mock downstream', () => {
       expect(scenario.failureReasons).toEqual([]);
       expect(scenario.jobCounts.failed).toBe(0);
       expect(scenario.jobCounts.completed).toBe(EXPECTED_COMPLETED_JOBS);
+      expect(scenario.downstreamSuccessesBeforeRedelivery).toBe(0);
+      expect(scenario.downstreamRateLimitRejections).toBe(0);
     });
 
-    it('actually drives the downstream into rate limiting', () => {
-      expect(scenario.downstreamRateLimitRejections).toBeGreaterThan(0);
-      expect(scenario.burstJobs.filter((job) => job.attemptsMade > 1).length).toBeGreaterThan(0);
-    });
-
-    it('recovers every rate-limited job inside its retry budget', () => {
-      const exhausted = scenario.burstJobs.filter(
-        (job) => job.attemptsMade > ACCESS_REQUEST_JOB_ATTEMPTS,
-      );
-
-      expect(exhausted).toEqual([]);
-      expect(scenario.downstreamRateLimitRejections).toBeLessThanOrEqual(
-        EXPECTED_UNIQUE_REQUESTS * (ACCESS_REQUEST_JOB_ATTEMPTS - 1),
-      );
-    });
-
-    it('invokes the downstream exactly once per unique request', () => {
-      expect(scenario.downstreamSuccessesBeforeRedelivery).toBe(EXPECTED_UNIQUE_REQUESTS);
+    it('does not invoke the mock downstream for unique webhook requests', () => {
+      expect(scenario.downstreamSuccessesBeforeRedelivery).toBe(0);
 
       const processedOnce = scenario.burstJobs.map((job) =>
         workerResultSchema.parse(job.returnValue),
@@ -428,7 +418,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
       );
     });
 
-    it('intercepts a redelivered job before it reaches the downstream twice', () => {
+    it('intercepts a redelivered job before recommendation creation runs twice', () => {
       expect(scenario.redelivery.found).toBe(true);
       expect(workerResultSchema.parse(scenario.redelivery.returnValue)).toEqual({
         replayed: true,
@@ -437,9 +427,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
           requestId: buildRequestId(0),
         },
       });
-      expect(scenario.downstreamSuccessesAfterRedelivery).toBe(
-        scenario.downstreamSuccessesBeforeRedelivery,
-      );
+      expect(scenario.downstreamSuccessesAfterRedelivery).toBe(0);
     });
 
     it('persists one idempotency key per unique request at both boundaries', () => {
@@ -449,6 +437,96 @@ describe('Access request webhook burst ingestion (integration)', () => {
 
     it('namespaces the worker key so it cannot collide with the webhook key', () => {
       expect(buildWorkerIdempotencyRequestId(buildRequestId(0))).not.toBe(buildRequestId(0));
+    });
+  });
+
+  describe('HITL approve is the only downstream execution path', () => {
+    const adminHeaders = {
+      [DEMO_ROLE_HEADER]: 'admin',
+      [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.admin.actorId,
+    };
+    const userHeaders = {
+      [DEMO_ROLE_HEADER]: 'user',
+      [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.user.actorId,
+    };
+
+    it('invokes mock downstream once per unique approve and skips idempotent replay', async () => {
+      if (app === undefined || prisma === undefined) {
+        throw new Error('Nest application was not initialised');
+      }
+
+      await prisma.user.upsert({
+        where: { id: SEED_REQUESTOR_USER_ID },
+        create: {
+          id: SEED_REQUESTOR_USER_ID,
+          employeeIdHash: hashIdentifier(SEED_REQUESTOR_EMPLOYEE_ID),
+          department: 'Engineering',
+          costCenterHash: 'd02c81895847a0671a5ad9621989da8ec6ef82174e0ab2b20936a8648b40ec55',
+          role: 'engineer',
+        },
+        update: {
+          employeeIdHash: hashIdentifier(SEED_REQUESTOR_EMPLOYEE_ID),
+        },
+      });
+      await prisma.user.upsert({
+        where: { id: SEED_HITL_ADMIN_USER_ID },
+        create: {
+          id: SEED_HITL_ADMIN_USER_ID,
+          employeeIdHash: 'a11a1111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          department: 'Security',
+          costCenterHash: '4905fe7b8ad9cf74ee9f1dc5c66c6cd5cb0e66b3f53a099a277e9e681d1ec87c',
+          role: 'hitl_admin',
+        },
+        update: {},
+      });
+
+      const created = await request(app.getHttpServer())
+        .post('/access-requests')
+        .set(userHeaders)
+        .send({
+          title: 'Data Analyst',
+          department: 'Finance Analytics',
+          costCenter: 'CC-FIN-07',
+          systemName: 'DATA_WAREHOUSE',
+          entitlementKey: 'FIN_DATASET_READ',
+          justification: 'Quarterly reporting pipeline',
+        })
+        .expect(201);
+
+      const requestId = z
+        .string()
+        .min(1)
+        .parse((created.body as { requestId?: unknown }).requestId);
+      const downstreamBeforeApprove = downstreamSuccesses;
+
+      await request(app.getHttpServer())
+        .post(`/access-requests/${requestId}/approve`)
+        .set(adminHeaders)
+        .expect(200);
+
+      expect(downstreamSuccesses).toBe(downstreamBeforeApprove + 1);
+
+      const execution = app.get(EntitlementExecutionService);
+      await execution.grant({
+        requestId,
+        employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
+        actorUserId: DEMO_PRINCIPALS.admin.userId,
+        systemName: 'DATA_WAREHOUSE',
+        targetEntitlement: 'FIN_DATASET_READ',
+      });
+
+      expect(downstreamSuccesses).toBe(downstreamBeforeApprove + 1);
+
+      const granted = await prisma.entitlement.findUnique({
+        where: {
+          userId_resourceName_permissionLevel: {
+            userId: SEED_REQUESTOR_USER_ID,
+            resourceName: 'DATA_WAREHOUSE',
+            permissionLevel: 'FIN_DATASET_READ',
+          },
+        },
+      });
+      expect(granted).not.toBeNull();
     });
   });
 });

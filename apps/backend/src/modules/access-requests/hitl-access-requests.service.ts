@@ -11,6 +11,7 @@ import type {
 } from '@policy-pilot/shared-types';
 import { Prisma } from '@prisma/client';
 
+import { hashIdentifier } from '../../common/crypto/hash-identifier';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import type { DemoPrincipal } from '../auth/demo-auth.constants';
 import {
@@ -19,9 +20,10 @@ import {
   type AccessRequestStatus,
 } from '../database/repositories/access-request.repository';
 import { EntitlementRepository } from '../database/repositories/entitlement.repository';
+import { UserRepository } from '../database/repositories/user.repository';
 import { AccessRecommendationService } from './access-recommendation.service';
 import type { CreateHitlAccessRequestDto } from './dto/hitl-access-requests.dto';
-import { SEED_REQUESTOR_USER_ID } from './seed-ids';
+import { EntitlementExecutionService } from './entitlement-execution.service';
 
 function parseStoredRecommendation(value: Prisma.JsonValue): AccessRecommendation {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -81,7 +83,9 @@ export class HitlAccessRequestsService {
   public constructor(
     private readonly accessRequestRepository: AccessRequestRepository,
     private readonly entitlementRepository: EntitlementRepository,
+    private readonly userRepository: UserRepository,
     private readonly accessRecommendationService: AccessRecommendationService,
+    private readonly entitlementExecutionService: EntitlementExecutionService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
@@ -105,9 +109,8 @@ export class HitlAccessRequestsService {
 
   public async listPending(): Promise<PendingAccessRequest[]> {
     const rows = await this.accessRequestRepository.findPendingReview();
-    const entitlements = await this.entitlementRepository.findByUserId(SEED_REQUESTOR_USER_ID);
-    const currentEntitlements = entitlements.map(
-      (entitlement) => `${entitlement.resourceName}:${entitlement.permissionLevel}`,
+    const entitlementsByEmployeeId = await this.loadEntitlementsByEmployeeId(
+      rows.map((row) => row.employeeId),
     );
 
     return rows.map((row) => ({
@@ -119,16 +122,15 @@ export class HitlAccessRequestsService {
       systemName: row.systemName,
       targetEntitlement: row.targetEntitlement,
       justification: row.justification,
-      currentEntitlements,
+      currentEntitlements: entitlementsByEmployeeId.get(row.employeeId) ?? [],
       recommendation: parseStoredRecommendation(row.recommendationJson),
     }));
   }
 
   public async listHistory(): Promise<AccessRequestHistoryItem[]> {
     const rows = await this.accessRequestRepository.findDecided();
-    const entitlements = await this.entitlementRepository.findByUserId(SEED_REQUESTOR_USER_ID);
-    const currentEntitlements = entitlements.map(
-      (entitlement) => `${entitlement.resourceName}:${entitlement.permissionLevel}`,
+    const entitlementsByEmployeeId = await this.loadEntitlementsByEmployeeId(
+      rows.map((row) => row.employeeId),
     );
 
     return rows.map((row) => ({
@@ -140,7 +142,7 @@ export class HitlAccessRequestsService {
       systemName: row.systemName,
       targetEntitlement: row.targetEntitlement,
       justification: row.justification,
-      currentEntitlements,
+      currentEntitlements: entitlementsByEmployeeId.get(row.employeeId) ?? [],
       recommendation: parseStoredRecommendation(row.recommendationJson),
       status: toHistoryStatus(row.status),
       decidedAt: (row.decidedAt ?? row.createdAt).toISOString(),
@@ -195,6 +197,19 @@ export class HitlAccessRequestsService {
     }
 
     const auditAction = isPending ? firstDecisionAuditAction : 'HUMAN_DECISION_OVERRIDE';
+    const executionInput = {
+      requestId: existing.requestId,
+      employeeId: existing.employeeId,
+      actorUserId: principal.userId,
+      systemName: existing.systemName,
+      targetEntitlement: existing.targetEntitlement,
+    };
+
+    if (status === ACCESS_REQUEST_STATUS.APPROVED) {
+      await this.entitlementExecutionService.grant(executionInput);
+    } else if (existing.status === ACCESS_REQUEST_STATUS.APPROVED) {
+      await this.entitlementExecutionService.revoke(executionInput);
+    }
 
     await this.accessRequestRepository.markDecided({
       requestId,
@@ -214,5 +229,46 @@ export class HitlAccessRequestsService {
       requestId,
       status: toResultStatus(status),
     };
+  }
+
+  private async loadEntitlementsByEmployeeId(
+    employeeIds: string[],
+  ): Promise<Map<string, string[]>> {
+    const uniqueEmployeeIds = [...new Set(employeeIds)];
+    const entitlementsByEmployeeId = new Map<string, string[]>();
+    for (const employeeId of uniqueEmployeeIds) {
+      entitlementsByEmployeeId.set(employeeId, []);
+    }
+
+    if (uniqueEmployeeIds.length === 0) {
+      return entitlementsByEmployeeId;
+    }
+
+    const hashToEmployeeId = new Map(
+      uniqueEmployeeIds.map((employeeId) => [hashIdentifier(employeeId), employeeId]),
+    );
+    const users = await this.userRepository.findByEmployeeIdHashes([...hashToEmployeeId.keys()]);
+    const employeeIdByUserId = new Map<string, string>();
+    for (const user of users) {
+      const employeeId = hashToEmployeeId.get(user.employeeIdHash);
+      if (employeeId !== undefined) {
+        employeeIdByUserId.set(user.id, employeeId);
+      }
+    }
+
+    const entitlements = await this.entitlementRepository.findByUserIds(
+      users.map((user) => user.id),
+    );
+    for (const entitlement of entitlements) {
+      const employeeId = employeeIdByUserId.get(entitlement.userId);
+      if (employeeId === undefined) {
+        continue;
+      }
+      const current = entitlementsByEmployeeId.get(employeeId) ?? [];
+      current.push(`${entitlement.resourceName}:${entitlement.permissionLevel}`);
+      entitlementsByEmployeeId.set(employeeId, current);
+    }
+
+    return entitlementsByEmployeeId;
   }
 }

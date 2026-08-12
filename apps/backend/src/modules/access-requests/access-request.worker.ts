@@ -12,7 +12,6 @@ import {
   buildWorkerIdempotencyRequestId,
 } from './access-requests.constants';
 import { AccessRequestDto } from './dto/access-requests.dto';
-import { MockDownstreamService } from './mock-downstream.service';
 
 export interface AccessRequestProcessedResponse {
   status: 'processed';
@@ -32,7 +31,6 @@ export class AccessRequestWorker extends WorkerHost {
 
   public constructor(
     private readonly idempotencyService: IdempotencyService,
-    private readonly mockDownstream: MockDownstreamService,
     private readonly accessRecommendationService: AccessRecommendationService,
   ) {
     super();
@@ -46,7 +44,6 @@ export class AccessRequestWorker extends WorkerHost {
       endpoint: ACCESS_REQUEST_WORKER_ENDPOINT,
       execute: async (): Promise<AccessRequestProcessedResponse> => {
         await this.accessRecommendationService.createFromWebhook(job.data);
-        await this.mockDownstream.invoke();
 
         return {
           status: 'processed',

@@ -33,6 +33,16 @@ export class UserRepository {
     });
   }
 
+  public async findByEmployeeIdHashes(employeeIdHashes: string[]): Promise<User[]> {
+    if (employeeIdHashes.length === 0) {
+      return [];
+    }
+
+    return this.prisma.user.findMany({
+      where: { employeeIdHash: { in: employeeIdHashes } },
+    });
+  }
+
   public async findById(id: string): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { id },
