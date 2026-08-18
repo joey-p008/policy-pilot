@@ -10,16 +10,16 @@ export interface PromptManifestEntry {
 
 export const PROMPT_MANIFEST = {
   'system-policy': {
-    version: '1.4.0',
-    fileName: 'system-policy-v1.4.0.txt',
+    version: '1.5.0',
+    fileName: 'system-policy-v1.5.0.txt',
   },
   'rag-synthesis': {
     version: '1.0.0',
     fileName: 'rag-synthesis-v1.0.0.txt',
   },
   'eval-grounding-judge': {
-    version: '1.0.0',
-    fileName: 'eval-grounding-judge-v1.0.0.txt',
+    version: '1.1.0',
+    fileName: 'eval-grounding-judge-v1.1.0.txt',
   },
 } as const satisfies Record<PromptKey, PromptManifestEntry>;
 

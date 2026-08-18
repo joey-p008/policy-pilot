@@ -38,6 +38,7 @@ export function AuthSessionBridge({ children }: { children: ReactNode }): JSX.El
       isAdmin: role === 'admin',
       isAuthenticated: auth.isAuthenticated,
       isLoading: auth.isLoading,
+      signInWithRole: null,
       signOut: async (): Promise<void> => {
         setAuthSession(null);
         await auth.signoutRedirect();

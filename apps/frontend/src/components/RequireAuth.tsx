@@ -1,9 +1,10 @@
 import type { JSX } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from 'react-oidc-context';
+
+import { useAuthSession } from '../context/AuthSessionContext';
 
 export function RequireAuth(): JSX.Element {
-  const auth = useAuth();
+  const auth = useAuthSession();
   const location = useLocation();
 
   if (auth.isLoading) {
