@@ -1,6 +1,18 @@
 import type { AuthProviderProps } from 'react-oidc-context';
 
+import { isOidcEnvConfigured } from './oidc-env';
+
 export const DEFAULT_OIDC_ROLE_CLAIM = 'https://policy-pilot.local/roles';
+
+export function isOidcConfigured(): boolean {
+  return isOidcEnvConfigured({
+    authority: import.meta.env.VITE_OIDC_AUTHORITY,
+    clientId: import.meta.env.VITE_OIDC_CLIENT_ID,
+    audience: import.meta.env.VITE_OIDC_AUDIENCE,
+    redirectUri: import.meta.env.VITE_OIDC_REDIRECT_URI,
+    postLogoutRedirectUri: import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
+  });
+}
 
 function requiredEnv(
   name:

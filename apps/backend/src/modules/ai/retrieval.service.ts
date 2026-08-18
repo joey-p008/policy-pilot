@@ -3,14 +3,16 @@ import { z } from 'zod';
 
 import {
   PolicyChunkRepository,
-  PolicyChunkSimilarityRow,
+  type PolicyChunkSimilarityRow,
 } from '../database/repositories/policy-chunk.repository';
+import { DEFAULT_SECTION_TITLE } from './document-chunker';
 import { PolicyDocumentChunk, PolicyDocumentChunkSchema } from './dto/document-ingestion.dto';
 import { EMBEDDING_CLIENT, EMBEDDING_DIMENSIONS } from './embedding/embedding.types';
 import type { EmbeddingClient } from './embedding/embedding.types';
 import { resolvePolicyDocumentPrefix } from './system-policy-document-prefix';
 
 export const RETRIEVAL_TOP_K = 4;
+export const RETRIEVAL_CANDIDATE_LIMIT = RETRIEVAL_TOP_K * 2;
 
 const retrievalRequestSchema = z.object({
   requestId: z.string().min(1),
@@ -24,6 +26,27 @@ const retrievalRequestSchema = z.object({
 });
 
 export type RetrievalRequest = z.infer<typeof retrievalRequestSchema>;
+
+function isGeneralSectionTitle(title: string): boolean {
+  return title.trim().toLowerCase() === DEFAULT_SECTION_TITLE.toLowerCase();
+}
+
+function preferNamedSectionRows(
+  rows: ReadonlyArray<PolicyChunkSimilarityRow>,
+): PolicyChunkSimilarityRow[] {
+  const named: PolicyChunkSimilarityRow[] = [];
+  const general: PolicyChunkSimilarityRow[] = [];
+
+  for (const row of rows) {
+    if (isGeneralSectionTitle(row.sectionTitle)) {
+      general.push(row);
+    } else {
+      named.push(row);
+    }
+  }
+
+  return [...named, ...general].slice(0, RETRIEVAL_TOP_K);
+}
 
 @Injectable()
 export class RetrievalService {
@@ -51,10 +74,10 @@ export class RetrievalService {
     const documentIdPrefix = resolvePolicyDocumentPrefix(validatedRequest.targetResource ?? '');
     const rows = await this.policyChunkRepository.findTopSimilar(
       embedding,
-      RETRIEVAL_TOP_K,
+      RETRIEVAL_CANDIDATE_LIMIT,
       documentIdPrefix === undefined ? undefined : { documentIdPrefix },
     );
-    return rows.map((row) => this.toPolicyDocumentChunk(row));
+    return preferNamedSectionRows(rows).map((row) => this.toPolicyDocumentChunk(row));
   }
 
   private buildQueryText(request: RetrievalRequest): string {

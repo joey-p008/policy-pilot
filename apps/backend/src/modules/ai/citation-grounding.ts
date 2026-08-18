@@ -91,6 +91,43 @@ function mapCitationToChunk(
   return best;
 }
 
+export interface CitationGroundingMeasurement {
+  readonly emittedCount: number;
+  readonly groundedCount: number;
+  readonly citationHitRate: number;
+}
+
+/**
+ * Deterministic citation-hit rate: grounded LLM citations / emitted LLM citations.
+ * Empty APPROVE citations score 0; empty DENY/ESCALATE citations score 1 (intentional).
+ */
+export function measureCitationGrounding(
+  decision: Decision,
+  policyChunks: ReadonlyArray<PolicyDocumentChunk>,
+): CitationGroundingMeasurement {
+  const emittedCount = decision.policy_citations.length;
+  if (emittedCount === 0) {
+    return {
+      emittedCount: 0,
+      groundedCount: 0,
+      citationHitRate: decision.decision === 'APPROVE' ? 0 : 1,
+    };
+  }
+
+  let groundedCount = 0;
+  for (const citation of decision.policy_citations) {
+    if (mapCitationToChunk(citation, policyChunks) !== undefined) {
+      groundedCount += 1;
+    }
+  }
+
+  return {
+    emittedCount,
+    groundedCount,
+    citationHitRate: groundedCount / emittedCount,
+  };
+}
+
 /**
  * Remaps LLM citations onto retrieved chunk metadata and drops ungrounded citations.
  * If APPROVE/DENY would be left with zero grounded citations, forces ESCALATE.

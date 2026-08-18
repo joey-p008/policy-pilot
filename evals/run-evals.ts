@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
+import { InternalServerErrorException } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { parse as parseDotenv } from 'dotenv';
 import { z } from 'zod';
@@ -9,14 +10,12 @@ import { z } from 'zod';
 import { AppModule } from '../apps/backend/src/app.module';
 import { listActivePromptVersions, type PromptKey } from '../apps/backend/src/config/prompts';
 import { CHAT_CLIENT, type ChatClient } from '../apps/backend/src/modules/ai/chat/chat.types';
+import { measureCitationGrounding } from '../apps/backend/src/modules/ai/citation-grounding';
 import { DecisionEngineService } from '../apps/backend/src/modules/ai/decision-engine.service';
 import type { PolicyDocumentChunk } from '../apps/backend/src/modules/ai/dto/document-ingestion.dto';
+import { estimateCostUsd } from '../apps/backend/src/modules/ai/observability/cost-estimator';
 import { executeWithObservability } from '../apps/backend/src/modules/ai/observability/llm-observability.wrapper';
-import { ACCESS_DECISION_PROMPT_KEY } from '../apps/backend/src/modules/ai/prompts/access-decision.prompt';
 import {
-  DECISION_JSON_SCHEMA_NAME,
-  DecisionJsonSchema,
-  DecisionSchema,
   RecommendationDecisionSchema,
   type Decision,
   type RecommendationDecision,
@@ -90,6 +89,9 @@ interface ScenarioReport {
   readonly recallAtK: number;
   readonly schemaValid: boolean;
   readonly groundingScore: number;
+  readonly citationHitRate: number;
+  readonly judgeRationale: string | null;
+  readonly judgeDecisionMatch: boolean | null;
   readonly latencyMs: number;
   readonly estimatedCostUsd: number;
   readonly expectedDecision: RecommendationDecision;
@@ -112,6 +114,7 @@ interface EvalReport {
     readonly recallAtK: number;
     readonly schemaValidityRate: number;
     readonly groundingScore: number;
+    readonly citationHitRate: number;
     readonly latencyP95Ms: number;
     readonly estimatedCostUsdTotal: number;
   };
@@ -311,68 +314,42 @@ async function scoreGrounding(params: {
   };
 }
 
-async function runDecisionEngine(params: {
-  readonly chatClient: ChatClient;
-  readonly requestId: string;
-  readonly targetEntitlement: string;
-  readonly justification: string;
-  readonly title: string;
-  readonly costCenter: string;
-  readonly department: string;
-  readonly targetResource: string;
-  readonly currentEntitlements: ReadonlyArray<string>;
-  readonly policyChunks: ReadonlyArray<PolicyDocumentChunk>;
-}): Promise<{
-  readonly actual: Decision | null;
-  readonly schemaValid: boolean;
-  readonly estimatedCostUsd: number;
-  readonly schemaErrors: ReadonlyArray<string>;
-}> {
-  const payload = {
-    access_request: {
-      request_id: params.requestId,
-      target_entitlement: params.targetEntitlement,
-      entitlement_key: params.targetEntitlement,
-      justification: params.justification,
-      title: params.title,
-      department: params.department,
-      cost_center: params.costCenter,
-      target_resource: params.targetResource,
-      system_name: params.targetResource,
-      current_entitlements: params.currentEntitlements,
-    },
-    policy_chunks: params.policyChunks,
-  };
+function setChatComplete(chatClient: ChatClient, complete: ChatClient['complete']): void {
+  (chatClient as { complete: ChatClient['complete'] }).complete = complete;
+}
 
-  const result = await executeWithObservability(
-    {
-      promptKey: ACCESS_DECISION_PROMPT_KEY,
-      model: params.chatClient.model,
-      payload,
-      execute: (assembledPrompt: string) =>
-        params.chatClient.complete(assembledPrompt, {
-          jsonSchema: DecisionJsonSchema,
-          schemaName: DECISION_JSON_SCHEMA_NAME,
-        }),
-    },
-    DecisionSchema,
-  );
+async function captureChatCost<T>(
+  chatClient: ChatClient,
+  operation: () => Promise<T>,
+): Promise<{ readonly value: T; readonly estimatedCostUsd: number }> {
+  let estimatedCostUsd = 0;
+  const originalComplete = chatClient.complete.bind(chatClient);
+  setChatComplete(chatClient, async (prompt, options) => {
+    const execution = await originalComplete(prompt, options);
+    estimatedCostUsd += estimateCostUsd(
+      chatClient.model,
+      execution.inputTokens,
+      execution.outputTokens,
+    );
+    return execution;
+  });
 
-  return {
-    actual: result.data,
-    schemaValid: result.observation.schemaValid && result.data !== null,
-    estimatedCostUsd: result.observation.estimatedCostUsd,
-    schemaErrors: result.observation.schemaErrors,
-  };
+  try {
+    const value = await operation();
+    return { value, estimatedCostUsd };
+  } finally {
+    setChatComplete(chatClient, originalComplete);
+  }
 }
 
 async function evaluateScenario(params: {
   readonly scenario: GoldenScenario;
   readonly retrievalService: RetrievalService;
+  readonly decisionEngine: DecisionEngineService;
   readonly chatClient: ChatClient;
   readonly k: number;
 }): Promise<ScenarioReport> {
-  const { scenario, retrievalService, chatClient, k } = params;
+  const { scenario, retrievalService, decisionEngine, chatClient, k } = params;
   const context = buildScenarioContext(scenario);
   const expectedChunkKeys = scenario.expected_retrieved_chunks.map((chunk) => citationKey(chunk));
 
@@ -380,6 +357,9 @@ async function evaluateScenario(params: {
   let actual: Decision | null = null;
   let schemaValid = false;
   let groundingScore = 0;
+  let citationHitRate = 0;
+  let judgeRationale: string | null = null;
+  let judgeDecisionMatch: boolean | null = null;
   let estimatedCostUsd = 0;
   let error: string | null = null;
   let latencyMs = 0;
@@ -398,33 +378,38 @@ async function evaluateScenario(params: {
     });
 
     try {
-      const decisionResult = await runDecisionEngine({
-        chatClient,
-        requestId: scenario.webhook_input.request_id,
-        targetEntitlement: scenario.webhook_input.requested_entitlement,
-        justification: context.justification,
-        title: context.title,
-        costCenter: context.costCenter,
-        department: context.department,
-        targetResource: context.targetResource,
-        currentEntitlements: context.currentEntitlements,
-        policyChunks: retrieved,
-      });
+      const captured = await captureChatCost(chatClient, () =>
+        decisionEngine.decide({
+          request: {
+            requestId: scenario.webhook_input.request_id,
+            targetEntitlement: scenario.webhook_input.requested_entitlement,
+            justification: context.justification,
+            title: context.title,
+            costCenter: context.costCenter,
+            department: context.department,
+            targetResource: context.targetResource,
+            currentEntitlements: [...context.currentEntitlements],
+          },
+          policyChunks: retrieved,
+        }),
+      );
       latencyMs = Date.now() - startedAt;
-      actual = decisionResult.actual;
-      schemaValid = decisionResult.schemaValid;
-      estimatedCostUsd += decisionResult.estimatedCostUsd;
-      if (!schemaValid) {
-        error = `decision_schema_invalid: ${decisionResult.schemaErrors.join('; ') || 'unknown'}`;
-      }
+      actual = captured.value;
+      schemaValid = true;
+      estimatedCostUsd += captured.estimatedCostUsd;
+      citationHitRate = measureCitationGrounding(actual, retrieved).citationHitRate;
     } catch (decisionError: unknown) {
       latencyMs = Date.now() - startedAt;
       schemaValid = false;
       actual = null;
-      error =
-        decisionError instanceof Error
-          ? `decision_failed: ${decisionError.message}`
-          : 'decision_failed: unknown error';
+      if (decisionError instanceof InternalServerErrorException) {
+        error = `decision_schema_invalid: ${decisionError.message}`;
+      } else {
+        error =
+          decisionError instanceof Error
+            ? `decision_failed: ${decisionError.message}`
+            : 'decision_failed: unknown error';
+      }
     }
   } catch (retrievalError: unknown) {
     latencyMs = Date.now() - startedAt;
@@ -445,10 +430,13 @@ async function evaluateScenario(params: {
         retrievedChunks: retrieved,
       });
       groundingScore = judged.result.score;
+      judgeRationale = judged.result.rationale;
+      judgeDecisionMatch = judged.result.decision_match;
       estimatedCostUsd += judged.estimatedCostUsd;
     } catch (judgeError: unknown) {
       groundingScore = 0;
       const judgeMessage = judgeError instanceof Error ? judgeError.message : 'unknown judge error';
+      judgeRationale = judgeMessage;
       error =
         error === null
           ? `judge_failed: ${judgeMessage}`
@@ -456,6 +444,8 @@ async function evaluateScenario(params: {
     }
   } else if (actual !== null && actual.decision !== scenario.expected_agent_output.decision) {
     groundingScore = 0;
+    judgeDecisionMatch = false;
+    judgeRationale = `Decision mismatch: expected ${scenario.expected_agent_output.decision}, got ${actual.decision}`;
   }
 
   return {
@@ -464,6 +454,9 @@ async function evaluateScenario(params: {
     recallAtK: roundMetric(recall),
     schemaValid,
     groundingScore: roundMetric(groundingScore),
+    citationHitRate: roundMetric(citationHitRate),
+    judgeRationale,
+    judgeDecisionMatch,
     latencyMs,
     estimatedCostUsd: roundMetric(estimatedCostUsd),
     expectedDecision: scenario.expected_agent_output.decision,
@@ -487,6 +480,7 @@ function buildReport(params: {
       : params.scenarios.filter((scenario) => scenario.schemaValid).length /
         params.scenarios.length;
   const groundingScore = mean(params.scenarios.map((scenario) => scenario.groundingScore));
+  const citationHitRate = mean(params.scenarios.map((scenario) => scenario.citationHitRate));
   const estimatedCostUsdTotal = params.scenarios.reduce(
     (sum, scenario) => sum + scenario.estimatedCostUsd,
     0,
@@ -508,6 +502,7 @@ function buildReport(params: {
       recallAtK: roundMetric(recallAtKScore),
       schemaValidityRate: roundMetric(schemaValidityRate),
       groundingScore: roundMetric(groundingScore),
+      citationHitRate: roundMetric(citationHitRate),
       latencyP95Ms: percentileNearestRank(latencies, 95),
       estimatedCostUsdTotal: roundMetric(estimatedCostUsdTotal),
     },
@@ -535,6 +530,7 @@ function printSummary(report: EvalReport): void {
   process.stdout.write(`Recall@${report.k}: ${report.metrics.recallAtK}\n`);
   process.stdout.write(`Schema Validity Rate: ${report.metrics.schemaValidityRate}\n`);
   process.stdout.write(`Grounding Score: ${report.metrics.groundingScore}\n`);
+  process.stdout.write(`Citation Hit Rate: ${report.metrics.citationHitRate}\n`);
   process.stdout.write(`Latency p95 (ms): ${report.metrics.latencyP95Ms}\n`);
   process.stdout.write(`Estimated USD Cost: ${report.metrics.estimatedCostUsdTotal}\n`);
   process.stdout.write(
@@ -579,8 +575,7 @@ async function main(): Promise<void> {
 
   try {
     const retrievalService = app.get(RetrievalService);
-    // Confirm Nest wires the production DecisionEngineService (same prompt + JSON schema path).
-    app.get(DecisionEngineService);
+    const decisionEngine = app.get(DecisionEngineService);
     const chatClient = app.get<ChatClient>(CHAT_CLIENT);
     const golden = await loadGoldenDataset();
 
@@ -591,12 +586,13 @@ async function main(): Promise<void> {
       const result = await evaluateScenario({
         scenario,
         retrievalService,
+        decisionEngine,
         chatClient,
         k: RETRIEVAL_TOP_K,
       });
       scenarios.push(result);
       process.stdout.write(
-        `  recall=${result.recallAtK} schema=${result.schemaValid} grounding=${result.groundingScore} latencyMs=${result.latencyMs}\n`,
+        `  recall=${result.recallAtK} schema=${result.schemaValid} grounding=${result.groundingScore} citationHit=${result.citationHitRate} latencyMs=${result.latencyMs}\n`,
       );
     }
   } catch (error: unknown) {
