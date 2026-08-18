@@ -3,11 +3,14 @@ import { resolve } from 'node:path';
 
 import { config as loadEnvFile } from 'dotenv';
 
+import { installOidcTestEnv } from './oidc-test-keys';
+
 /**
  * Runs as a Jest `setupFiles` entry, which executes before the spec module (and
  * therefore before the import-time rate-limit config) is loaded.
  */
 loadEnvFile({ path: resolve(__dirname, '../.env') });
+installOidcTestEnv();
 
 const runId = `burst-${randomUUID()}`;
 

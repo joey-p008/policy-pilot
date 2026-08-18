@@ -9,19 +9,24 @@ import {
   SEED_REQUESTOR_USER_ID,
 } from '../access-requests/seed-ids';
 
-export const DEMO_ROLE_HEADER = 'x-demo-role';
-export const DEMO_ACTOR_ID_HEADER = 'x-demo-actor-id';
+export const ROLES_KEY = 'auth_roles';
 
-export const DEMO_ROLES_KEY = 'demo_roles';
+/** Namespaced access-token claim used unless OIDC_ROLE_CLAIM is set. */
+export const DEFAULT_OIDC_ROLE_CLAIM = 'https://policy-pilot.local/roles';
 
-export interface DemoPrincipal {
+export interface AuthPrincipal {
   role: DemoRole;
   actorId: string;
   userId: string;
   employeeId: string;
 }
 
-export const DEMO_PRINCIPALS: Readonly<Record<DemoRole, DemoPrincipal>> = {
+/**
+ * Seeded HITL identities. JWT `sub` is not provisioned into `users` in this
+ * slice; role claims map onto these principals so entitlement and audit FKs
+ * keep using stable seed UUIDs.
+ */
+export const AUTH_PRINCIPALS: Readonly<Record<DemoRole, AuthPrincipal>> = {
   user: {
     role: 'user',
     actorId: SEED_DEMO_USER_ACTOR_ID,

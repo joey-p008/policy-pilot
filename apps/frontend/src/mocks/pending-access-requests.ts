@@ -8,7 +8,7 @@ import type {
   RecommendationDecision,
 } from '@policy-pilot/shared-types';
 
-import { getDemoIdentity } from '../lib/demo-identity';
+import { getAuthSession } from '../lib/auth-session';
 
 export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
   {
@@ -156,9 +156,17 @@ function setMockHistoryStore(requests: AccessRequestHistoryItem[]): void {
   (globalThis as MockPendingGlobal)[MOCK_HISTORY_STORE_KEY] = requests;
 }
 
+function requireAuthSession(): NonNullable<ReturnType<typeof getAuthSession>> {
+  const session = getAuthSession();
+  if (session === null) {
+    throw new Error('Mock RBAC denied: signed-in session required');
+  }
+  return session;
+}
+
 function assertAdminRole(): void {
-  const identity = getDemoIdentity();
-  if (identity.role !== 'admin') {
+  const session = requireAuthSession();
+  if (session.role !== 'admin') {
     throw new Error('Mock RBAC denied: admin role required for this action');
   }
 }
@@ -240,10 +248,10 @@ export function getMockHistoryAccessRequests(): AccessRequestHistoryItem[] {
 export function createMockAccessRequest(payload: CreateAccessRequestPayload): PendingAccessRequest {
   console.info('[HITL mock create]', payload);
 
-  const identity = getDemoIdentity();
+  const session = requireAuthSession();
   const created: PendingAccessRequest = {
     requestId: `req-mock-${Date.now()}`,
-    employeeId: identity.role === 'admin' ? 'E-MOCK-ADMIN' : 'E-MOCK-042',
+    employeeId: session.role === 'admin' ? 'E-MOCK-ADMIN' : 'E-MOCK-042',
     title: payload.title,
     department: payload.department,
     costCenter: payload.costCenter,
@@ -265,7 +273,7 @@ export function applyMockDecision(
   assertAdminRole();
   console.info('[HITL mock decision]', payload, { status });
 
-  const identity = getDemoIdentity();
+  const identity = requireAuthSession();
   const pendingStore = getMockPendingStore();
   const pendingMatch = pendingStore.find((request) => request.requestId === payload.requestId);
 

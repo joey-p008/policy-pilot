@@ -3,7 +3,7 @@ import type { AccessRequest, User } from '@prisma/client';
 
 import { hashIdentifier } from '../../common/crypto/hash-identifier';
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { DEMO_PRINCIPALS } from '../auth/demo-auth.constants';
+import { AUTH_PRINCIPALS } from '../auth/auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
   AccessRequestRepository,
@@ -29,7 +29,7 @@ const hitlCreateDto = {
 const executionInput = {
   requestId: 'req-1',
   employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
-  actorUserId: DEMO_PRINCIPALS.admin.userId,
+  actorUserId: AUTH_PRINCIPALS.admin.userId,
   systemName: 'DATA_WAREHOUSE',
   targetEntitlement: 'FIN_DATASET_READ',
 };
@@ -154,15 +154,15 @@ describe('HitlAccessRequestsService', () => {
       },
     });
 
-    const result = await service.createWithRecommendation(hitlCreateDto, DEMO_PRINCIPALS.user);
+    const result = await service.createWithRecommendation(hitlCreateDto, AUTH_PRINCIPALS.user);
 
     expect(result.employeeId).toBe(SEED_REQUESTOR_EMPLOYEE_ID);
     expect(result.targetEntitlement).toBe('prod-postgres-admin');
     expect(mockAccessRecommendationService.createWithRecommendation).toHaveBeenCalledWith(
       expect.objectContaining({
-        employeeId: DEMO_PRINCIPALS.user.employeeId,
-        actorUserId: DEMO_PRINCIPALS.user.userId,
-        entitlementUserId: DEMO_PRINCIPALS.user.userId,
+        employeeId: AUTH_PRINCIPALS.user.employeeId,
+        actorUserId: AUTH_PRINCIPALS.user.userId,
+        entitlementUserId: AUTH_PRINCIPALS.user.userId,
         title: hitlCreateDto.title,
         department: hitlCreateDto.department,
         costCenter: hitlCreateDto.costCenter,
@@ -181,7 +181,7 @@ describe('HitlAccessRequestsService', () => {
     });
 
     it('queues the grant instead of calling the downstream inline', async () => {
-      const result = await service.approve('req-1', DEMO_PRINCIPALS.admin);
+      const result = await service.approve('req-1', AUTH_PRINCIPALS.admin);
 
       expect(result).toEqual({
         requestId: 'req-1',
@@ -193,18 +193,18 @@ describe('HitlAccessRequestsService', () => {
     });
 
     it('records the request as APPROVED and QUEUED', async () => {
-      await service.approve('req-1', DEMO_PRINCIPALS.admin);
+      await service.approve('req-1', AUTH_PRINCIPALS.admin);
 
       expect(mockAccessRequestRepository.markDecided).toHaveBeenCalledWith({
         requestId: 'req-1',
         status: ACCESS_REQUEST_STATUS.APPROVED,
         provisioningStatus: PROVISIONING_STATUS.QUEUED,
-        decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+        decidedByAdminId: AUTH_PRINCIPALS.admin.actorId,
       });
     });
 
     it('persists the decision before enqueuing so the worker cannot race the write', async () => {
-      await service.approve('req-1', DEMO_PRINCIPALS.admin);
+      await service.approve('req-1', AUTH_PRINCIPALS.admin);
 
       expect(mockAccessRequestRepository.markDecided.mock.invocationCallOrder[0]).toBeLessThan(
         mockAccessGrantQueueService.enqueueGrant.mock.invocationCallOrder[0],
@@ -212,14 +212,14 @@ describe('HitlAccessRequestsService', () => {
     });
 
     it('audits the human approval with the queued provisioning state', async () => {
-      await service.approve('req-1', DEMO_PRINCIPALS.admin);
+      await service.approve('req-1', AUTH_PRINCIPALS.admin);
 
       expect(mockAuditLogService.append).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'HUMAN_APPROVED',
           newState: {
             status: ACCESS_REQUEST_STATUS.APPROVED,
-            actor_id: DEMO_PRINCIPALS.admin.actorId,
+            actor_id: AUTH_PRINCIPALS.admin.actorId,
             provisioning_status: PROVISIONING_STATUS.QUEUED,
           },
         }),
@@ -232,7 +232,7 @@ describe('HitlAccessRequestsService', () => {
     mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
     mockAuditLogService.append.mockResolvedValue({} as never);
 
-    const result = await service.escalate('req-1', DEMO_PRINCIPALS.admin);
+    const result = await service.escalate('req-1', AUTH_PRINCIPALS.admin);
 
     expect(result).toEqual({
       requestId: 'req-1',
@@ -245,7 +245,7 @@ describe('HitlAccessRequestsService', () => {
       requestId: 'req-1',
       status: ACCESS_REQUEST_STATUS.ESCALATED,
       provisioningStatus: PROVISIONING_STATUS.NOT_APPLICABLE,
-      decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+      decidedByAdminId: AUTH_PRINCIPALS.admin.actorId,
     });
     expect(mockAuditLogService.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -259,7 +259,7 @@ describe('HitlAccessRequestsService', () => {
     mockAccessRequestRepository.markDecided.mockResolvedValue({} as AccessRequest);
     mockAuditLogService.append.mockResolvedValue({} as never);
 
-    await service.deny('req-1', DEMO_PRINCIPALS.admin);
+    await service.deny('req-1', AUTH_PRINCIPALS.admin);
 
     expect(mockAccessGrantQueueService.cancelQueuedGrant).not.toHaveBeenCalled();
     expect(mockEntitlementExecutionService.revoke).not.toHaveBeenCalled();
@@ -279,7 +279,7 @@ describe('HitlAccessRequestsService', () => {
     });
 
     it('withdraws a still-queued grant before revoking', async () => {
-      const result = await service.deny('req-1', DEMO_PRINCIPALS.admin);
+      const result = await service.deny('req-1', AUTH_PRINCIPALS.admin);
 
       expect(result).toEqual({
         requestId: 'req-1',
@@ -296,19 +296,19 @@ describe('HitlAccessRequestsService', () => {
     it('still revokes when the grant had already left the queue', async () => {
       mockAccessGrantQueueService.cancelQueuedGrant.mockResolvedValue(false);
 
-      await service.deny('req-1', DEMO_PRINCIPALS.admin);
+      await service.deny('req-1', AUTH_PRINCIPALS.admin);
 
       expect(mockEntitlementExecutionService.revoke).toHaveBeenCalledTimes(1);
     });
 
     it('clears the provisioning state and audits the override', async () => {
-      await service.deny('req-1', DEMO_PRINCIPALS.admin);
+      await service.deny('req-1', AUTH_PRINCIPALS.admin);
 
       expect(mockAccessRequestRepository.markDecided).toHaveBeenCalledWith({
         requestId: 'req-1',
         status: ACCESS_REQUEST_STATUS.DENIED,
         provisioningStatus: PROVISIONING_STATUS.NOT_APPLICABLE,
-        decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+        decidedByAdminId: AUTH_PRINCIPALS.admin.actorId,
       });
       expect(mockAuditLogService.append).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -316,7 +316,7 @@ describe('HitlAccessRequestsService', () => {
           previousState: { status: ACCESS_REQUEST_STATUS.APPROVED },
           newState: {
             status: ACCESS_REQUEST_STATUS.DENIED,
-            actor_id: DEMO_PRINCIPALS.admin.actorId,
+            actor_id: AUTH_PRINCIPALS.admin.actorId,
             provisioning_status: PROVISIONING_STATUS.NOT_APPLICABLE,
           },
         }),
@@ -328,7 +328,7 @@ describe('HitlAccessRequestsService', () => {
         pendingRequest({ status: ACCESS_REQUEST_STATUS.ESCALATED }),
       );
 
-      await service.approve('req-1', DEMO_PRINCIPALS.admin);
+      await service.approve('req-1', AUTH_PRINCIPALS.admin);
 
       expect(mockAccessGrantQueueService.enqueueGrant).toHaveBeenCalledWith(executionInput);
       expect(mockAccessGrantQueueService.cancelQueuedGrant).not.toHaveBeenCalled();
@@ -340,7 +340,7 @@ describe('HitlAccessRequestsService', () => {
       pendingRequest({ status: ACCESS_REQUEST_STATUS.DENIED }),
     );
 
-    await expect(service.deny('req-1', DEMO_PRINCIPALS.admin)).rejects.toBeInstanceOf(
+    await expect(service.deny('req-1', AUTH_PRINCIPALS.admin)).rejects.toBeInstanceOf(
       ConflictException,
     );
     expect(mockEntitlementExecutionService.revoke).not.toHaveBeenCalled();
@@ -350,7 +350,7 @@ describe('HitlAccessRequestsService', () => {
   it('throws NotFoundException when deciding a missing request', async () => {
     mockAccessRequestRepository.findByRequestId.mockResolvedValue(null);
 
-    await expect(service.approve('missing', DEMO_PRINCIPALS.admin)).rejects.toBeInstanceOf(
+    await expect(service.approve('missing', AUTH_PRINCIPALS.admin)).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(mockAccessGrantQueueService.enqueueGrant).not.toHaveBeenCalled();
@@ -378,7 +378,7 @@ describe('HitlAccessRequestsService', () => {
         },
         createdAt: decidedAt,
         decidedAt,
-        decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+        decidedByAdminId: AUTH_PRINCIPALS.admin.actorId,
       } as unknown as AccessRequest,
     ]);
 
@@ -397,7 +397,7 @@ describe('HitlAccessRequestsService', () => {
       provisioningStatus: PROVISIONING_STATUS.QUEUED,
       currentEntitlements: ['payroll-api:read'],
       decidedAt: decidedAt.toISOString(),
-      decidedByAdminId: DEMO_PRINCIPALS.admin.actorId,
+      decidedByAdminId: AUTH_PRINCIPALS.admin.actorId,
     });
   });
 

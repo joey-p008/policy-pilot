@@ -10,11 +10,8 @@ import { AppModule } from '../src/app.module';
 import { hashIdentifier } from '../src/common/crypto/hash-identifier';
 import { DecisionEngineService } from '../src/modules/ai/decision-engine.service';
 import { RetrievalService } from '../src/modules/ai/retrieval.service';
-import {
-  DEMO_ACTOR_ID_HEADER,
-  DEMO_PRINCIPALS,
-  DEMO_ROLE_HEADER,
-} from '../src/modules/auth/demo-auth.constants';
+import { AUTH_PRINCIPALS } from '../src/modules/auth/auth.constants';
+import { signTestAccessToken } from './oidc-test-keys';
 import {
   ACCESS_GRANT_QUEUE,
   ACCESS_REQUEST_JOB_NAME,
@@ -483,14 +480,13 @@ describe('Access request webhook burst ingestion (integration)', () => {
   });
 
   describe('HITL approve is the only downstream execution path', () => {
-    const adminHeaders = {
-      [DEMO_ROLE_HEADER]: 'admin',
-      [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.admin.actorId,
-    };
-    const userHeaders = {
-      [DEMO_ROLE_HEADER]: 'user',
-      [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.user.actorId,
-    };
+    let adminAuthorization = '';
+    let userAuthorization = '';
+
+    beforeAll(async () => {
+      adminAuthorization = `Bearer ${await signTestAccessToken('admin')}`;
+      userAuthorization = `Bearer ${await signTestAccessToken('user')}`;
+    });
 
     it('invokes mock downstream once per unique approve and skips idempotent replay', async () => {
       if (app === undefined || prisma === undefined) {
@@ -524,7 +520,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
 
       const created = await request(app.getHttpServer())
         .post('/access-requests')
-        .set(userHeaders)
+        .set('Authorization', userAuthorization)
         .send({
           title: 'Data Analyst',
           department: 'Finance Analytics',
@@ -543,7 +539,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
 
       const approveResponse = await request(app.getHttpServer())
         .post(`/access-requests/${requestId}/approve`)
-        .set(adminHeaders)
+        .set('Authorization', adminAuthorization)
         .expect(200);
 
       // Approve only queues the grant; the rate-limited worker performs the
@@ -557,7 +553,7 @@ describe('Access request webhook burst ingestion (integration)', () => {
       await execution.grant({
         requestId,
         employeeId: SEED_REQUESTOR_EMPLOYEE_ID,
-        actorUserId: DEMO_PRINCIPALS.admin.userId,
+        actorUserId: AUTH_PRINCIPALS.admin.userId,
         systemName: 'DATA_WAREHOUSE',
         targetEntitlement: 'FIN_DATASET_READ',
       });

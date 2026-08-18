@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 import { hashIdentifier } from '../../common/crypto/hash-identifier';
 import { AuditLogService } from '../audit-log/audit-log.service';
-import type { DemoPrincipal } from '../auth/demo-auth.constants';
+import type { AuthPrincipal } from '../auth/auth.constants';
 import {
   ACCESS_REQUEST_STATUS,
   AccessRequestRepository,
@@ -108,7 +108,7 @@ export class HitlAccessRequestsService {
 
   public async createWithRecommendation(
     dto: CreateHitlAccessRequestDto,
-    principal: DemoPrincipal,
+    principal: AuthPrincipal,
   ): Promise<PendingAccessRequest> {
     return this.accessRecommendationService.createWithRecommendation({
       requestId: randomUUID(),
@@ -170,28 +170,28 @@ export class HitlAccessRequestsService {
 
   public async approve(
     requestId: string,
-    principal: DemoPrincipal,
+    principal: AuthPrincipal,
   ): Promise<AccessRequestDecisionResult> {
     return this.decide(requestId, principal, ACCESS_REQUEST_STATUS.APPROVED, 'HUMAN_APPROVED');
   }
 
   public async deny(
     requestId: string,
-    principal: DemoPrincipal,
+    principal: AuthPrincipal,
   ): Promise<AccessRequestDecisionResult> {
     return this.decide(requestId, principal, ACCESS_REQUEST_STATUS.DENIED, 'HUMAN_DENIED');
   }
 
   public async escalate(
     requestId: string,
-    principal: DemoPrincipal,
+    principal: AuthPrincipal,
   ): Promise<AccessRequestDecisionResult> {
     return this.decide(requestId, principal, ACCESS_REQUEST_STATUS.ESCALATED, 'HUMAN_ESCALATED');
   }
 
   private async decide(
     requestId: string,
-    principal: DemoPrincipal,
+    principal: AuthPrincipal,
     status: AccessRequestStatus,
     firstDecisionAuditAction: string,
   ): Promise<AccessRequestDecisionResult> {

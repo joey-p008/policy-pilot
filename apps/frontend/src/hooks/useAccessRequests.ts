@@ -18,7 +18,7 @@ import {
   fetchAccessRequestHistory,
   fetchPendingAccessRequests,
 } from '../api/access-requests';
-import { useDemoRole } from '../context/DemoRoleContext';
+import { useAuthSession } from '../context/AuthSessionContext';
 
 type DecisionMutationContext = {
   previousPending: PendingAccessRequest[] | undefined;
@@ -71,7 +71,7 @@ function useDecisionMutation(
 }
 
 export function usePendingRequests() {
-  const { isAdmin } = useDemoRole();
+  const { isAdmin } = useAuthSession();
 
   return useQuery({
     queryKey: ACCESS_REQUESTS_PENDING_QUERY_KEY,
@@ -94,7 +94,7 @@ export function hasOutstandingProvisioning(
 }
 
 export function useRequestHistory() {
-  const { isAdmin } = useDemoRole();
+  const { isAdmin } = useAuthSession();
 
   return useQuery({
     queryKey: ACCESS_REQUESTS_HISTORY_QUERY_KEY,
@@ -107,7 +107,7 @@ export function useRequestHistory() {
 
 export function useSubmitAccessRequest() {
   const queryClient = useQueryClient();
-  const { isAdmin } = useDemoRole();
+  const { isAdmin } = useAuthSession();
 
   return useMutation({
     mutationFn: (payload: CreateAccessRequestPayload) => createAccessRequest(payload),

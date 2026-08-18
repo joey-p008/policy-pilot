@@ -3,11 +3,11 @@
 export const SEED_USER_A_ID = '8d0504b3-0e57-454a-833f-1c22aec8089b';
 export const SEED_USER_B_ID = '041aa56a-3752-44ec-a157-436d4f30328f';
 
-/** Stable HITL admin actor mapped from demo actor id "admin-123". */
+/** Stable HITL admin actor mapped from JWT admin role ("admin-123"). */
 export const SEED_HITL_ADMIN_USER_ID = 'f1c2a3b4-5d6e-4789-a012-3456789abcde';
 export const SEED_HITL_ADMIN_API_ID = 'admin-123';
 
-/** Demo RBAC actor ids sent via X-Demo-Actor-Id. */
+/** Seeded actor ids attached after JWT role mapping (not client-supplied). */
 export const SEED_DEMO_USER_ACTOR_ID = 'user-042';
 export const SEED_DEMO_ADMIN_ACTOR_ID = SEED_HITL_ADMIN_API_ID;
 

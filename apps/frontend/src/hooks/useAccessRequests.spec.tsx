@@ -21,8 +21,8 @@ import {
   fetchAccessRequestHistory,
   fetchPendingAccessRequests,
 } from '../api/access-requests';
-import { DemoRoleProvider } from '../context/DemoRoleContext';
-import { setDemoIdentity } from '../lib/demo-identity';
+import { MockAuthSessionProvider } from '../context/AuthSessionContext';
+import { setAuthSessionForTests } from '../lib/auth-session';
 import {
   PROVISIONING_POLL_INTERVAL_MS,
   hasOutstandingProvisioning,
@@ -116,7 +116,7 @@ function createWrapper() {
   return function Wrapper({ children }: { children: ReactNode }): JSX.Element {
     return (
       <QueryClientProvider client={queryClient}>
-        <DemoRoleProvider>{children}</DemoRoleProvider>
+        <MockAuthSessionProvider>{children}</MockAuthSessionProvider>
       </QueryClientProvider>
     );
   };
@@ -125,7 +125,7 @@ function createWrapper() {
 describe('useAccessRequests hooks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    setDemoIdentity('admin');
+    setAuthSessionForTests('admin');
   });
 
   it('loads pending access requests for admin', async () => {
@@ -145,7 +145,7 @@ describe('useAccessRequests hooks', () => {
   });
 
   it('does not fetch pending requests for user role', async () => {
-    setDemoIdentity('user');
+    setAuthSessionForTests('user');
     mockedFetchPendingAccessRequests.mockResolvedValue([pendingRequest]);
 
     const { result } = renderHook(() => usePendingRequests(), {

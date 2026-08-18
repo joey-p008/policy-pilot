@@ -15,9 +15,9 @@ import type {
 } from '@policy-pilot/shared-types';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import type { DemoPrincipal } from '../auth/demo-auth.constants';
-import { DemoAuthGuard } from '../auth/demo-auth.guard';
-import { DemoPrincipalParam } from '../auth/demo-principal.decorator';
+import type { AuthPrincipal } from '../auth/auth.constants';
+import { CurrentPrincipal } from '../auth/current-principal.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import {
   createHitlAccessRequestSchema,
@@ -26,7 +26,7 @@ import {
 import { HitlAccessRequestsService } from './hitl-access-requests.service';
 
 @Controller('access-requests')
-@UseGuards(DemoAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class AccessRequestsHitlController {
   public constructor(private readonly hitlAccessRequestsService: HitlAccessRequestsService) {}
 
@@ -35,7 +35,7 @@ export class AccessRequestsHitlController {
   @HttpCode(HttpStatus.CREATED)
   public async create(
     @Body(new ZodValidationPipe(createHitlAccessRequestSchema)) body: CreateHitlAccessRequestDto,
-    @DemoPrincipalParam() principal: DemoPrincipal,
+    @CurrentPrincipal() principal: AuthPrincipal,
   ): Promise<PendingAccessRequest> {
     return this.hitlAccessRequestsService.createWithRecommendation(body, principal);
   }
@@ -57,7 +57,7 @@ export class AccessRequestsHitlController {
   @HttpCode(HttpStatus.OK)
   public async approve(
     @Param('requestId') requestId: string,
-    @DemoPrincipalParam() principal: DemoPrincipal,
+    @CurrentPrincipal() principal: AuthPrincipal,
   ): Promise<AccessRequestDecisionResult> {
     return this.hitlAccessRequestsService.approve(requestId, principal);
   }
@@ -67,7 +67,7 @@ export class AccessRequestsHitlController {
   @HttpCode(HttpStatus.OK)
   public async deny(
     @Param('requestId') requestId: string,
-    @DemoPrincipalParam() principal: DemoPrincipal,
+    @CurrentPrincipal() principal: AuthPrincipal,
   ): Promise<AccessRequestDecisionResult> {
     return this.hitlAccessRequestsService.deny(requestId, principal);
   }
@@ -77,7 +77,7 @@ export class AccessRequestsHitlController {
   @HttpCode(HttpStatus.OK)
   public async escalate(
     @Param('requestId') requestId: string,
-    @DemoPrincipalParam() principal: DemoPrincipal,
+    @CurrentPrincipal() principal: AuthPrincipal,
   ): Promise<AccessRequestDecisionResult> {
     return this.hitlAccessRequestsService.escalate(requestId, principal);
   }
