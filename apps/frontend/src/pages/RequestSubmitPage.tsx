@@ -1,13 +1,13 @@
 import type { JSX } from 'react';
 
 import { RequestSubmitForm } from '../components/RequestSubmitForm';
-import { useDemoRole } from '../context/DemoRoleContext';
+import { useAuthSession } from '../context/AuthSessionContext';
 import { useRequesterProfile } from '../context/RequesterProfileContext';
 import { useSubmitAccessRequest } from '../hooks/useAccessRequests';
 import { mutationErrorMessage } from '../lib/mutation-error';
 
 export function RequestSubmitPage(): JSX.Element {
-  const { isAdmin } = useDemoRole();
+  const { isAdmin } = useAuthSession();
   const { profile } = useRequesterProfile();
   const submit = useSubmitAccessRequest();
 

@@ -28,11 +28,7 @@ import {
 } from '../src/modules/access-requests/seed-ids';
 import { DecisionEngineService } from '../src/modules/ai/decision-engine.service';
 import { RetrievalService } from '../src/modules/ai/retrieval.service';
-import {
-  DEMO_ACTOR_ID_HEADER,
-  DEMO_PRINCIPALS,
-  DEMO_ROLE_HEADER,
-} from '../src/modules/auth/demo-auth.constants';
+import { signTestAccessToken } from './oidc-test-keys';
 import {
   ACCESS_REQUEST_STATUS,
   PROVISIONING_STATUS,
@@ -129,10 +125,7 @@ describe('Access grant downstream backpressure (integration)', () => {
   const downstreamSuccessTimestamps: number[] = [];
   let downstreamRateLimitRejections = 0;
 
-  const adminHeaders = {
-    [DEMO_ROLE_HEADER]: 'admin',
-    [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.admin.actorId,
-  };
+  let adminAuthorization = '';
 
   const buildRequestId = (index: number): string => `${runId}-grant-${index}`;
 
@@ -150,7 +143,7 @@ describe('Access grant downstream backpressure (integration)', () => {
 
     const response = await request(app.getHttpServer())
       .post(`/access-requests/${requestId}/approve`)
-      .set(adminHeaders);
+      .set('Authorization', adminAuthorization);
 
     return { requestId, status: response.status, body: response.body };
   }
@@ -195,6 +188,8 @@ describe('Access grant downstream backpressure (integration)', () => {
   }
 
   beforeAll(async () => {
+    adminAuthorization = `Bearer ${await signTestAccessToken('admin')}`;
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })

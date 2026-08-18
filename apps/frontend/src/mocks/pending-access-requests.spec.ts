@@ -1,4 +1,4 @@
-import { setDemoIdentity } from '../lib/demo-identity';
+import { setAuthSessionForTests } from '../lib/auth-session';
 import {
   applyMockDecision,
   createMockAccessRequest,
@@ -11,7 +11,7 @@ import {
 describe('pending-access-requests mock store', () => {
   beforeEach(() => {
     resetMockPendingAccessRequests();
-    setDemoIdentity('admin');
+    setAuthSessionForTests('admin');
     jest.spyOn(console, 'info').mockImplementation(() => undefined);
   });
 
@@ -42,7 +42,7 @@ describe('pending-access-requests mock store', () => {
   });
 
   it('rejects pending list access for user role', () => {
-    setDemoIdentity('user');
+    setAuthSessionForTests('user');
     expect(() => getMockPendingAccessRequests()).toThrow(/admin role required/);
   });
 

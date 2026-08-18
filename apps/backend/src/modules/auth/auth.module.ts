@@ -1,10 +1,12 @@
 import { Global, Module } from '@nestjs/common';
 
-import { DemoAuthGuard } from './demo-auth.guard';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { OidcAuthConfig } from './oidc-auth.config';
+import { OidcTokenVerifier } from './oidc-token.verifier';
 
 @Global()
 @Module({
-  providers: [DemoAuthGuard],
-  exports: [DemoAuthGuard],
+  providers: [OidcAuthConfig, OidcTokenVerifier, JwtAuthGuard],
+  exports: [OidcAuthConfig, OidcTokenVerifier, JwtAuthGuard],
 })
 export class AuthModule {}

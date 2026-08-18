@@ -1,30 +1,24 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 
-import {
-  DEMO_ACTOR_ID_HEADER,
-  DEMO_PRINCIPALS,
-  DEMO_ROLE_HEADER,
-} from '../auth/demo-auth.constants';
-import { DemoAuthGuard } from '../auth/demo-auth.guard';
+import { AUTH_PRINCIPALS } from '../auth/auth.constants';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OidcAuthConfig } from '../auth/oidc-auth.config';
+import { OidcTokenVerifier } from '../auth/oidc-token.verifier';
+import { installOidcTestEnv, signTestAccessToken } from '../../../test/oidc-test-keys';
 import { AccessRequestsHitlController } from './access-requests-hitl.controller';
 import { HitlAccessRequestsService } from './hitl-access-requests.service';
 
-const adminHeaders = {
-  [DEMO_ROLE_HEADER]: 'admin',
-  [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.admin.actorId,
-};
-
-const userHeaders = {
-  [DEMO_ROLE_HEADER]: 'user',
-  [DEMO_ACTOR_ID_HEADER]: DEMO_PRINCIPALS.user.actorId,
-};
+installOidcTestEnv();
 
 describe('AccessRequestsHitlController', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication<App> | undefined;
+  let userAuthorization: string;
+  let adminAuthorization: string;
 
   const mockHitlService: jest.Mocked<
     Pick<
@@ -40,6 +34,11 @@ describe('AccessRequestsHitlController', () => {
     escalate: jest.fn(),
   };
 
+  beforeAll(async () => {
+    userAuthorization = `Bearer ${await signTestAccessToken('user')}`;
+    adminAuthorization = `Bearer ${await signTestAccessToken('admin')}`;
+  });
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -50,7 +49,15 @@ describe('AccessRequestsHitlController', () => {
           provide: HitlAccessRequestsService,
           useValue: mockHitlService,
         },
-        DemoAuthGuard,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string): string | undefined => process.env[key],
+          },
+        },
+        OidcAuthConfig,
+        OidcTokenVerifier,
+        JwtAuthGuard,
         Reflector,
       ],
     }).compile();
@@ -60,11 +67,20 @@ describe('AccessRequestsHitlController', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   });
 
-  it('rejects create without demo identity headers', async () => {
-    await request(app.getHttpServer())
+  function httpServer(): App {
+    if (app === undefined) {
+      throw new Error('Nest application was not initialised');
+    }
+    return app.getHttpServer();
+  }
+
+  it('rejects create without a bearer token', async () => {
+    await request(httpServer())
       .post('/access-requests')
       .send({
         title: 'Data Analyst',
@@ -80,9 +96,9 @@ describe('AccessRequestsHitlController', () => {
   });
 
   it('rejects create payloads with empty justification', async () => {
-    await request(app.getHttpServer())
+    await request(httpServer())
       .post('/access-requests')
-      .set(userHeaders)
+      .set('Authorization', userAuthorization)
       .send({
         title: 'Data Analyst',
         department: 'Finance Analytics',
@@ -115,9 +131,9 @@ describe('AccessRequestsHitlController', () => {
       },
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await request(httpServer())
       .post('/access-requests')
-      .set(userHeaders)
+      .set('Authorization', userAuthorization)
       .send({
         title: 'Data Analyst',
         department: 'Finance Analytics',
@@ -138,19 +154,22 @@ describe('AccessRequestsHitlController', () => {
         entitlementKey: 'prod-postgres-admin',
         justification: 'Incident response',
       },
-      DEMO_PRINCIPALS.user,
+      AUTH_PRINCIPALS.user,
     );
   });
 
   it('forbids users from listing pending requests', async () => {
-    await request(app.getHttpServer()).get('/access-requests/pending').set(userHeaders).expect(403);
+    await request(httpServer())
+      .get('/access-requests/pending')
+      .set('Authorization', userAuthorization)
+      .expect(403);
     expect(mockHitlService.listPending).not.toHaveBeenCalled();
   });
 
   it('forbids users from escalating requests', async () => {
-    await request(app.getHttpServer())
+    await request(httpServer())
       .post('/access-requests/req-1/escalate')
-      .set(userHeaders)
+      .set('Authorization', userAuthorization)
       .expect(403);
 
     expect(mockHitlService.escalate).not.toHaveBeenCalled();
@@ -163,9 +182,9 @@ describe('AccessRequestsHitlController', () => {
       provisioningStatus: 'NOT_APPLICABLE',
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await request(httpServer())
       .post('/access-requests/req-1/escalate')
-      .set(adminHeaders)
+      .set('Authorization', adminAuthorization)
       .expect(200);
 
     expect(response.body).toEqual({
@@ -173,15 +192,15 @@ describe('AccessRequestsHitlController', () => {
       status: 'escalated',
       provisioningStatus: 'NOT_APPLICABLE',
     });
-    expect(mockHitlService.escalate).toHaveBeenCalledWith('req-1', DEMO_PRINCIPALS.admin);
+    expect(mockHitlService.escalate).toHaveBeenCalledWith('req-1', AUTH_PRINCIPALS.admin);
   });
 
   it('lists history for admin', async () => {
     mockHitlService.listHistory.mockResolvedValue([]);
 
-    await request(app.getHttpServer())
+    await request(httpServer())
       .get('/access-requests/history')
-      .set(adminHeaders)
+      .set('Authorization', adminAuthorization)
       .expect(200);
 
     expect(mockHitlService.listHistory).toHaveBeenCalled();

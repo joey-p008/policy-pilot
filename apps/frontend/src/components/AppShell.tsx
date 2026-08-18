@@ -1,8 +1,7 @@
-import type { DemoRole } from '@policy-pilot/shared-types';
 import type { JSX } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
-import { useDemoRole } from '../context/DemoRoleContext';
+import { useAuthSession } from '../context/AuthSessionContext';
 import { useRequesterProfile } from '../context/RequesterProfileContext';
 
 function navClassName({ isActive }: { isActive: boolean }): string {
@@ -13,7 +12,7 @@ function navClassName({ isActive }: { isActive: boolean }): string {
 }
 
 export function AppShell(): JSX.Element {
-  const { role, setRole, isAdmin, identity } = useDemoRole();
+  const { role, isAdmin, session, signOut } = useAuthSession();
   const { profile } = useRequesterProfile();
 
   return (
@@ -26,7 +25,7 @@ export function AppShell(): JSX.Element {
             </p>
             <h1 className="text-3xl font-semibold tracking-tight">Access Request Console</h1>
             <p className="text-slate-300">
-              Demo RBAC: users submit requests; admins review, decide, and override history.
+              Signed-in users submit requests; admins review, decide, and override history.
             </p>
           </div>
 
@@ -58,24 +57,27 @@ export function AppShell(): JSX.Element {
                 Profile
               </NavLink>
               <p className="text-xs text-slate-400">
-                Acting as <span className="font-mono text-slate-200">{identity.actorId}</span> (
-                {role})
+                {session !== null ? (
+                  <>
+                    Signed in as{' '}
+                    <span className="font-mono text-slate-200">
+                      {session.subject.length > 0 ? session.subject : session.actorId}
+                    </span>{' '}
+                    ({role})
+                  </>
+                ) : (
+                  'Signed in, but this account has no Policy-Pilot role claim'
+                )}
               </p>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Role
-                </span>
-                <select
-                  value={role}
-                  onChange={(event) => {
-                    setRole(event.target.value as DemoRole);
-                  }}
-                  className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-teal-500 focus:outline-none"
-                >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
+              <button
+                type="button"
+                className="rounded border border-slate-700 px-2 py-1 text-sm text-slate-200 hover:bg-slate-800"
+                onClick={() => {
+                  void signOut();
+                }}
+              >
+                Sign out
+              </button>
             </div>
           </div>
         </header>

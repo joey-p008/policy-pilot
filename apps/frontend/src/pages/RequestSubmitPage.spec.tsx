@@ -5,10 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { JSX, ReactNode } from 'react';
 
-import { DemoRoleProvider } from '../context/DemoRoleContext';
+import { MockAuthSessionProvider } from '../context/AuthSessionContext';
 import { RequesterProfileProvider } from '../context/RequesterProfileContext';
 import { useSubmitAccessRequest } from '../hooks/useAccessRequests';
-import { setDemoIdentity } from '../lib/demo-identity';
+import { setAuthSessionForTests } from '../lib/auth-session';
 import { writeStoredRequesterProfile } from '../lib/requester-profile';
 import { RequestSubmitPage } from './RequestSubmitPage';
 
@@ -32,7 +32,7 @@ function renderWithProviders(ui: JSX.Element): void {
     return (
       <QueryClientProvider client={queryClient}>
         <RequesterProfileProvider>
-          <DemoRoleProvider>{children}</DemoRoleProvider>
+          <MockAuthSessionProvider>{children}</MockAuthSessionProvider>
         </RequesterProfileProvider>
       </QueryClientProvider>
     );
@@ -50,7 +50,7 @@ describe('RequestSubmitPage', () => {
       department: 'Finance Analytics',
       costCenter: 'CC-FIN-07',
     });
-    setDemoIdentity('user');
+    setAuthSessionForTests('user');
     mockedUseSubmitAccessRequest.mockReturnValue({
       mutate: jest.fn(),
       reset: jest.fn(),
