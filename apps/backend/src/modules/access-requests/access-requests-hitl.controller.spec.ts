@@ -128,6 +128,10 @@ describe('AccessRequestsHitlController', () => {
         rationale: 'Need ticket',
         confidenceScore: 0.9,
         policyCitations: [],
+        proposedTool: {
+          name: 'propose_access_decision',
+          status: 'awaiting_human_approval',
+        },
       },
     });
 

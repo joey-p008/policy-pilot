@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  AccessRecommendation,
-  PendingAccessRequest,
-  PolicyCitation,
+import {
+  AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
+  type AccessRecommendation,
+  type PendingAccessRequest,
+  type PolicyCitation,
 } from '@policy-pilot/shared-types';
 import { Prisma } from '@prisma/client';
 
@@ -73,6 +74,7 @@ function mapDecisionToRecommendation(
     rationale: decision.rationale,
     confidenceScore: decision.confidence_score,
     policyCitations,
+    proposedTool: AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
   };
 }
 
@@ -100,6 +102,7 @@ function parseStoredRecommendation(value: Prisma.JsonValue): AccessRecommendatio
     rationale,
     confidenceScore,
     policyCitations: policyCitations as PolicyCitation[],
+    proposedTool: AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
   };
 }
 

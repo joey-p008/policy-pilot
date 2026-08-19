@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import type { LlmExecutionResult } from '../observability/llm-observability.types';
 import type { ChatClient, ChatCompletionOptions } from './chat.types';
+import { toLlmExecutionResult, toOpenAiToolChoice, toOpenAiTools } from './map-chat-completion';
 
 const chatEnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
@@ -39,41 +40,67 @@ export class OpenAiChatClient implements ChatClient {
   ): Promise<LlmExecutionResult> {
     let lastError: unknown;
 
-    const responseFormat =
-      options?.jsonSchema === undefined
-        ? ({ type: 'json_object' } as const)
-        : ({
-            type: 'json_schema' as const,
-            json_schema: {
-              name: options.schemaName ?? 'structured_output',
-              strict: true,
-              schema: options.jsonSchema,
-            },
-          } as const);
+    const tools = options?.tools;
+    const hasTools = tools !== undefined && tools.length > 0;
+
+    if (hasTools && options?.jsonSchema !== undefined) {
+      throw new Error('ChatCompletionOptions cannot set both tools and jsonSchema');
+    }
 
     for (let attempt = 0; attempt < this.maxRetries; attempt += 1) {
       try {
         const response = await this.client.chat.completions.create({
           model: this.model,
-          response_format: responseFormat,
           messages: [
             {
               role: 'user',
               content: prompt,
             },
           ],
+          ...(hasTools
+            ? {
+                tools: toOpenAiTools(tools),
+                ...(options?.toolChoice === undefined
+                  ? {}
+                  : { tool_choice: toOpenAiToolChoice(options.toolChoice) }),
+              }
+            : {
+                response_format:
+                  options?.jsonSchema === undefined
+                    ? ({ type: 'json_object' } as const)
+                    : ({
+                        type: 'json_schema' as const,
+                        json_schema: {
+                          name: options.schemaName ?? 'structured_output',
+                          strict: true,
+                          schema: options.jsonSchema,
+                        },
+                      } as const),
+              }),
         });
 
-        const content = response.choices[0]?.message.content;
-        if (content === null || content === undefined || content.length === 0) {
+        const message = response.choices[0]?.message;
+        if (message === undefined) {
           throw new Error('OpenAI chat completion returned empty content');
         }
 
-        return {
-          content,
+        return toLlmExecutionResult({
+          message: {
+            content: message.content,
+            tool_calls: message.tool_calls
+              ?.filter((toolCall) => toolCall.type === 'function')
+              .map((toolCall) => ({
+                id: toolCall.id,
+                type: toolCall.type,
+                function: {
+                  name: toolCall.function.name,
+                  arguments: toolCall.function.arguments,
+                },
+              })),
+          },
           inputTokens: response.usage?.prompt_tokens ?? 0,
           outputTokens: response.usage?.completion_tokens ?? 0,
-        };
+        });
       } catch (error: unknown) {
         lastError = error;
         const canRetry = this.isRateLimitError(error) && attempt < this.maxRetries - 1;
@@ -101,8 +128,8 @@ export class OpenAiChatClient implements ChatClient {
     return false;
   }
 
-  private async sleep(ms: number): Promise<void> {
-    await new Promise<void>((resolve) => {
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
       setTimeout(resolve, ms);
     });
   }

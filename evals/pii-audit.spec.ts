@@ -56,6 +56,7 @@ function buildBaseObservation(overrides: Partial<LlmObservation> = {}): LlmObser
     estimatedCostUsd: 0.0001,
     schemaValid: true,
     schemaErrors: [],
+    toolName: null,
     ...overrides,
   };
 }

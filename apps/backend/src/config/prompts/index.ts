@@ -10,8 +10,8 @@ export interface PromptManifestEntry {
 
 export const PROMPT_MANIFEST = {
   'system-policy': {
-    version: '1.5.0',
-    fileName: 'system-policy-v1.5.0.txt',
+    version: '1.6.0',
+    fileName: 'system-policy-v1.6.0.txt',
   },
   'rag-synthesis': {
     version: '1.0.0',

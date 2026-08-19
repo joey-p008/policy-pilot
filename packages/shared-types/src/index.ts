@@ -19,11 +19,25 @@ export interface PolicyCitation {
 
 export type RecommendationDecision = 'APPROVE' | 'DENY' | 'ESCALATE';
 
+export const PROPOSED_ACCESS_DECISION_TOOL_NAME = 'propose_access_decision' as const;
+export const PROPOSED_TOOL_AWAITING_HUMAN_APPROVAL = 'awaiting_human_approval' as const;
+
+export interface ProposedAccessDecisionTool {
+  name: typeof PROPOSED_ACCESS_DECISION_TOOL_NAME;
+  status: typeof PROPOSED_TOOL_AWAITING_HUMAN_APPROVAL;
+}
+
+export const AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL: ProposedAccessDecisionTool = {
+  name: PROPOSED_ACCESS_DECISION_TOOL_NAME,
+  status: PROPOSED_TOOL_AWAITING_HUMAN_APPROVAL,
+};
+
 export interface AccessRecommendation {
   decision: RecommendationDecision;
   rationale: string;
   policyCitations: PolicyCitation[];
   confidenceScore: number;
+  proposedTool: ProposedAccessDecisionTool;
 }
 
 export interface CreateAccessRequestPayload {

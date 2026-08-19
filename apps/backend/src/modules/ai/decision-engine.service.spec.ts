@@ -3,6 +3,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import type { ChatClient } from './chat/chat.types';
 import { DecisionEngineService } from './decision-engine.service';
 import { DecisionSchema } from './schemas/recommendation.schema';
+import { PROPOSE_ACCESS_DECISION_TOOL_NAME } from './tools/propose-access-decision.tool';
 
 describe('DecisionEngineService', () => {
   const validDecision = {
@@ -34,6 +35,22 @@ describe('DecisionEngineService', () => {
 
   let service: DecisionEngineService;
 
+  function mockToolCompletion(payload: unknown, tokens = { input: 120, output: 80 }) {
+    const argumentsJson = JSON.stringify(payload);
+    mockChatClient.complete.mockResolvedValue({
+      content: argumentsJson,
+      toolCalls: [
+        {
+          id: 'call_test',
+          name: PROPOSE_ACCESS_DECISION_TOOL_NAME,
+          argumentsJson,
+        },
+      ],
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+    });
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
     service = new DecisionEngineService(mockChatClient);
@@ -43,14 +60,11 @@ describe('DecisionEngineService', () => {
     expect(service).toBeInstanceOf(DecisionEngineService);
     expect(Object.getOwnPropertyNames(service)).not.toContain('policyChunkRepository');
     expect(Object.getOwnPropertyNames(service)).not.toContain('prisma');
+    expect(Object.getOwnPropertyNames(service)).not.toContain('entitlementExecutionService');
   });
 
-  it('returns a DecisionSchema-valid object for valid LLM mock JSON', async () => {
-    mockChatClient.complete.mockResolvedValue({
-      content: JSON.stringify(validDecision),
-      inputTokens: 120,
-      outputTokens: 80,
-    });
+  it('returns a DecisionSchema-valid object for a valid propose_access_decision tool call', async () => {
+    mockToolCompletion(validDecision);
 
     const decision = await service.decide({
       request: {
@@ -69,21 +83,21 @@ describe('DecisionEngineService', () => {
     expect(assembledPrompt).not.toContain('employeeId');
     expect(mockChatClient.complete.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
-        schemaName: 'access_decision',
-        jsonSchema: expect.objectContaining({
-          type: 'object',
-          required: ['decision', 'rationale', 'policy_citations', 'confidence_score'],
-        }),
+        toolChoice: { name: PROPOSE_ACCESS_DECISION_TOOL_NAME },
+        tools: [
+          expect.objectContaining({
+            name: PROPOSE_ACCESS_DECISION_TOOL_NAME,
+            requiresHumanApproval: true,
+            strict: true,
+          }),
+        ],
       }),
     );
+    expect(mockChatClient.complete.mock.calls[0]?.[1]?.jsonSchema).toBeUndefined();
   });
 
   it('includes structured access-request context in the LLM payload', async () => {
-    mockChatClient.complete.mockResolvedValue({
-      content: JSON.stringify(validDecision),
-      inputTokens: 120,
-      outputTokens: 80,
-    });
+    mockToolCompletion(validDecision);
 
     await service.decide({
       request: {
@@ -107,21 +121,17 @@ describe('DecisionEngineService', () => {
   });
 
   it('forces ESCALATE when APPROVE citations cannot be grounded in retrieved chunks', async () => {
-    mockChatClient.complete.mockResolvedValue({
-      content: JSON.stringify({
-        decision: 'APPROVE',
-        rationale: 'Baseline match claimed without retrieved support.',
-        policy_citations: [
-          {
-            document_id: 'POL-9999-99-ZZZ',
-            page_number: 1,
-            section_title: 'Invented Section',
-          },
-        ],
-        confidence_score: 0.99,
-      }),
-      inputTokens: 120,
-      outputTokens: 80,
+    mockToolCompletion({
+      decision: 'APPROVE',
+      rationale: 'Baseline match claimed without retrieved support.',
+      policy_citations: [
+        {
+          document_id: 'POL-9999-99-ZZZ',
+          page_number: 1,
+          section_title: 'Invented Section',
+        },
+      ],
+      confidence_score: 0.99,
     });
 
     const decision = await service.decide({
@@ -141,6 +151,7 @@ describe('DecisionEngineService', () => {
   it('throws InternalServerErrorException when LLM returns unformatted text', async () => {
     mockChatClient.complete.mockResolvedValue({
       content: 'I think we should approve this.',
+      toolCalls: [],
       inputTokens: 10,
       outputTokens: 8,
     });
@@ -160,6 +171,7 @@ describe('DecisionEngineService', () => {
   it('throws InternalServerErrorException when LLM returns unauthorized SQL text', async () => {
     mockChatClient.complete.mockResolvedValue({
       content: 'DROP TABLE users; --',
+      toolCalls: [],
       inputTokens: 10,
       outputTokens: 8,
     });

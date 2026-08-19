@@ -2,6 +2,7 @@ import { maskPII } from '@policy-pilot/shared';
 import type { ZodType } from 'zod';
 
 import { loadPrompt } from '../../../config/prompts';
+import { extractExpectedToolCall } from '../tools/parse-proposed-tool-call';
 import { estimateCostUsd } from './cost-estimator';
 import {
   defaultLlmObservabilityLogger,
@@ -43,31 +44,53 @@ export async function executeWithObservability<TData, TPayload>(
   const execution = await request.execute(assembledPrompt);
   const latencyMs = Date.now() - startedAt;
 
-  const parsed = parseModelJson(execution.content);
-  const validation = schema.safeParse(parsed);
+  const expectedToolName = request.expectedToolName;
+  let parsed: unknown = parseModelJson(execution.content);
+  let modelResponseSource = execution.content;
+  const schemaErrors: string[] = [];
 
-  const schemaErrors = validation.success
-    ? []
-    : validation.error.issues.map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`);
+  if (expectedToolName !== undefined) {
+    const extracted = extractExpectedToolCall(execution.toolCalls, expectedToolName);
+    if (!extracted.success) {
+      schemaErrors.push(...extracted.errors);
+      parsed = undefined;
+    } else {
+      parsed = extracted.data;
+      modelResponseSource = extracted.argumentsJson;
+    }
+  }
+
+  const validation = schemaErrors.length > 0 ? null : schema.safeParse(parsed);
+
+  if (validation !== null && !validation.success) {
+    schemaErrors.push(
+      ...validation.error.issues.map(
+        (issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`,
+      ),
+    );
+  }
+
+  const schemaValid = validation !== null && validation.success;
 
   const observation = {
     promptName: metadata.key,
     promptVersion: metadata.version,
     model: request.model,
     inputPrompt: maskedAssembledPrompt,
-    modelResponse: maskJsonContent(execution.content),
+    modelResponse: maskJsonContent(modelResponseSource),
     inputTokens: execution.inputTokens,
     outputTokens: execution.outputTokens,
     latencyMs,
     estimatedCostUsd: estimateCostUsd(request.model, execution.inputTokens, execution.outputTokens),
-    schemaValid: validation.success,
+    schemaValid,
     schemaErrors,
+    toolName: expectedToolName ?? null,
   };
 
   logger.logObservation(observation);
 
   return {
-    data: validation.success ? validation.data : null,
+    data: schemaValid && validation !== null ? validation.data : null,
     observation,
   };
 }

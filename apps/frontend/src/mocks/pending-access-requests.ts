@@ -1,11 +1,12 @@
-import type {
-  AccessRequestDecisionPayload,
-  AccessRequestDecisionResult,
-  AccessRequestHistoryItem,
-  AccessRequestProvisioningStatus,
-  CreateAccessRequestPayload,
-  PendingAccessRequest,
-  RecommendationDecision,
+import {
+  AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
+  type AccessRequestDecisionPayload,
+  type AccessRequestDecisionResult,
+  type AccessRequestHistoryItem,
+  type AccessRequestProvisioningStatus,
+  type CreateAccessRequestPayload,
+  type PendingAccessRequest,
+  type RecommendationDecision,
 } from '@policy-pilot/shared-types';
 
 import { getAuthSession } from '../lib/auth-session';
@@ -42,6 +43,7 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
             'Break-glass admin access is limited to declared incidents and must be time-bound to no more than four hours with dual approval from Security and the owning service manager.',
         },
       ],
+      proposedTool: AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
     },
   },
   {
@@ -75,6 +77,7 @@ export const MOCK_PENDING_ACCESS_REQUESTS: PendingAccessRequest[] = [
             'Any upgrade from reader to writer on regulated warehouse datasets must be reviewed by Data Governance when the dataset is tagged as containing customer PII or financial aggregates.',
         },
       ],
+      proposedTool: AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
     },
   },
 ];
@@ -102,6 +105,7 @@ export const MOCK_HISTORY_ACCESS_REQUESTS: AccessRequestHistoryItem[] = [
           content: 'Read-only access is the default for new joiners.',
         },
       ],
+      proposedTool: AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
     },
     status: 'APPROVED',
     provisioningStatus: 'PROVISIONED',
@@ -205,6 +209,7 @@ function buildMockRecommendation(
           'Production admin entitlements for cloud data stores require an approved change ticket before grant.',
       },
     ],
+    proposedTool: AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
   };
 }
 
