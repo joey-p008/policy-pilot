@@ -9,6 +9,7 @@
     "test:integration": "jest --config ../../jest.integration.config.js --runInBand",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate"
   },
   "prisma": {

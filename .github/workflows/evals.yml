@@ -1,0 +1,88 @@
+name: Evals
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: evals-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: '0'
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: policy_pilot
+          POSTGRES_PASSWORD: policy_pilot
+          POSTGRES_DB: policy_pilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U policy_pilot -d policy_pilot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://policy_pilot:policy_pilot@localhost:5432/policy_pilot?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require OPENAI_API_KEY
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY secret is not set"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate -w @policy-pilot/backend
+
+      - name: Apply Prisma migrations
+        run: npm run prisma:migrate:deploy -w @policy-pilot/backend
+
+      - name: Seed golden policy chunks
+        run: npm run eval:seed-golden-chunks
+
+      - name: Run golden dataset evals
+        run: npm run eval
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: evals/output/report.json
+          if-no-files-found: warn
