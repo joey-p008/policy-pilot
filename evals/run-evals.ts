@@ -1,10 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 import { InternalServerErrorException } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { parse as parseDotenv } from 'dotenv';
 import { z } from 'zod';
 
 import { AppModule } from '../apps/backend/src/app.module';
@@ -24,11 +22,11 @@ import {
   RETRIEVAL_TOP_K,
   RetrievalService,
 } from '../apps/backend/src/modules/ai/retrieval.service';
+import { loadBackendEnv } from './load-backend-env';
 
 const ROOT_DIR = resolve(__dirname, '..');
 const GOLDEN_DATASET_PATH = join(ROOT_DIR, 'evals', 'golden_dataset.json');
 const REPORT_PATH = join(ROOT_DIR, 'evals', 'output', 'report.json');
-const BACKEND_ENV_PATH = join(ROOT_DIR, 'apps', 'backend', '.env');
 const EVAL_GROUNDING_JUDGE_PROMPT_KEY: PromptKey = 'eval-grounding-judge';
 const DEFAULT_GROUNDING_THRESHOLD = 0.8;
 const EXCERPT_MATCH_MIN_LENGTH = 40;
@@ -540,15 +538,6 @@ function printSummary(report: EvalReport): void {
     process.stdout.write(`Fatal error: ${report.fatalError}\n`);
   }
   process.stdout.write('===================================\n');
-}
-
-function loadBackendEnv(): void {
-  const parsed = parseDotenv(readFileSync(BACKEND_ENV_PATH));
-  for (const [key, value] of Object.entries(parsed)) {
-    if (process.env[key] === undefined && value !== undefined) {
-      process.env[key] = value;
-    }
-  }
 }
 
 async function main(): Promise<void> {

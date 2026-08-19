@@ -12,13 +12,16 @@
   ],
   "scripts": {
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit && npm --workspace=@policy-pilot/frontend exec -- tsc -p tsconfig.json --noEmit",
     "test": "jest",
     "test:integration": "jest --config jest.integration.config.js --runInBand",
     "build": "npm run build --workspaces",
     "verify": "npm run format && npm run lint && npm run type-check && npm test",
-    "eval": "ts-node evals/run-evals.ts",
+    "ci": "npm run format:check && npm run lint && npm run type-check && npm test",
+    "eval": "ts-node --project evals/tsconfig.json evals/run-evals.ts",
+    "eval:seed-golden-chunks": "ts-node --project evals/tsconfig.json evals/seed-golden-chunks.ts",
     "prepare": "husky"
   },
   "devDependencies": {
