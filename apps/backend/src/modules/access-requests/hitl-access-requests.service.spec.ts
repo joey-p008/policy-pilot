@@ -151,6 +151,10 @@ describe('HitlAccessRequestsService', () => {
         rationale: 'Missing change ticket.',
         confidenceScore: 0.9,
         policyCitations: [],
+        proposedTool: {
+          name: 'propose_access_decision',
+          status: 'awaiting_human_approval',
+        },
       },
     });
 
@@ -398,6 +402,12 @@ describe('HitlAccessRequestsService', () => {
       currentEntitlements: ['payroll-api:read'],
       decidedAt: decidedAt.toISOString(),
       decidedByAdminId: AUTH_PRINCIPALS.admin.actorId,
+      recommendation: expect.objectContaining({
+        proposedTool: {
+          name: 'propose_access_decision',
+          status: 'awaiting_human_approval',
+        },
+      }),
     });
   });
 

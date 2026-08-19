@@ -142,6 +142,10 @@ describe('AccessRecommendationService', () => {
     });
     expect(result.systemName).toBe('DATA_WAREHOUSE');
     expect(result.targetEntitlement).toBe('FIN_DATASET_EDIT');
+    expect(result.recommendation.proposedTool).toEqual({
+      name: 'propose_access_decision',
+      status: 'awaiting_human_approval',
+    });
     expect(mockAuditLogService.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'RECOMMENDATION_CREATED',
@@ -220,5 +224,9 @@ describe('AccessRecommendationService', () => {
     expect(mockDecisionEngineService.decide).not.toHaveBeenCalled();
     expect(mockAccessRequestRepository.create).not.toHaveBeenCalled();
     expect(result.recommendation.decision).toBe('APPROVE');
+    expect(result.recommendation.proposedTool).toEqual({
+      name: 'propose_access_decision',
+      status: 'awaiting_human_approval',
+    });
   });
 });

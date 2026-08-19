@@ -25,8 +25,20 @@ export {
   type IngestPoliciesResult,
   type PolicyDocumentChunk,
 } from './dto/document-ingestion.dto';
-export { CHAT_CLIENT, type ChatClient, type ChatCompletionOptions } from './chat/chat.types';
+export {
+  CHAT_CLIENT,
+  type ChatClient,
+  type ChatCompletionOptions,
+  type ChatToolChoice,
+  type ChatToolDefinition,
+} from './chat/chat.types';
 export { OpenAiChatClient } from './chat/openai-chat.client';
+export {
+  mapToolCalls,
+  toLlmExecutionResult,
+  toOpenAiToolChoice,
+  toOpenAiTools,
+} from './chat/map-chat-completion';
 export {
   groundDecisionCitations,
   measureCitationGrounding,
@@ -70,4 +82,17 @@ export type {
   LlmObservation,
   LlmObservabilityRequest,
   LlmObservabilityResult,
+  LlmToolCall,
 } from './observability/llm-observability.types';
+export {
+  PROPOSE_ACCESS_DECISION_TOOL,
+  PROPOSE_ACCESS_DECISION_TOOL_NAME,
+  isGatedAccessDecisionTool,
+} from './tools/propose-access-decision.tool';
+export {
+  extractExpectedToolCall,
+  parseProposedAccessDecisionToolCall,
+  type ToolCallParseFailure,
+  type ToolCallParseResult,
+  type ToolCallParseSuccess,
+} from './tools/parse-proposed-tool-call';

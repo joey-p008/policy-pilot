@@ -107,6 +107,9 @@ describe('HitlReviewPage', () => {
       '91',
     );
     expect(screen.getByText(denyRequest.recommendation.rationale)).toBeInTheDocument();
+    expect(
+      screen.getByText('Proposed tool: propose_access_decision · awaiting human approval'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve Recommendation' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Deny Request' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Escalate' })).toBeEnabled();

@@ -9,6 +9,7 @@ import { useState, type JSX } from 'react';
 import { ConfidenceGauge } from './ConfidenceGauge';
 import { DecisionBadge } from './DecisionBadge';
 import { PolicyCitationModal } from './PolicyCitationModal';
+import { ProposedToolBadge } from './ProposedToolBadge';
 import { ProvisioningBadge } from './ProvisioningBadge';
 import { RequestDecisionActions } from './RequestDecisionActions';
 
@@ -104,6 +105,7 @@ export function AccessRequestCard({
             {provisioningStatus !== undefined ? (
               <ProvisioningBadge provisioningStatus={provisioningStatus} />
             ) : null}
+            <ProposedToolBadge tool={request.recommendation.proposedTool} />
             <DecisionBadge decision={request.recommendation.decision} />
           </div>
         </div>

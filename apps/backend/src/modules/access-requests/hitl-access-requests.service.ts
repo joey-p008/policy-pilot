@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type {
-  AccessRecommendation,
-  AccessRequestDecisionResult,
-  AccessRequestHistoryItem,
-  AccessRequestHistoryStatus,
-  AccessRequestProvisioningStatus,
-  PendingAccessRequest,
-  PolicyCitation,
+import {
+  AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
+  type AccessRecommendation,
+  type AccessRequestDecisionResult,
+  type AccessRequestHistoryItem,
+  type AccessRequestHistoryStatus,
+  type AccessRequestProvisioningStatus,
+  type PendingAccessRequest,
+  type PolicyCitation,
 } from '@policy-pilot/shared-types';
 import { Prisma } from '@prisma/client';
 
@@ -53,6 +54,7 @@ function parseStoredRecommendation(value: Prisma.JsonValue): AccessRecommendatio
     rationale,
     confidenceScore,
     policyCitations: policyCitations as PolicyCitation[],
+    proposedTool: AWAITING_HUMAN_APPROVAL_PROPOSED_TOOL,
   };
 }
 

@@ -9,10 +9,10 @@ import {
 
 describe('prompt loader', () => {
   it('resolves active semantic versions from the manifest', () => {
-    expect(ACTIVE_PROMPT_VERSIONS['system-policy']).toBe('1.5.0');
+    expect(ACTIVE_PROMPT_VERSIONS['system-policy']).toBe('1.6.0');
     expect(ACTIVE_PROMPT_VERSIONS['rag-synthesis']).toBe('1.0.0');
     expect(ACTIVE_PROMPT_VERSIONS['eval-grounding-judge']).toBe('1.1.0');
-    expect(PROMPT_MANIFEST['system-policy'].fileName).toBe('system-policy-v1.5.0.txt');
+    expect(PROMPT_MANIFEST['system-policy'].fileName).toBe('system-policy-v1.6.0.txt');
     expect(PROMPT_MANIFEST['rag-synthesis'].fileName).toBe('rag-synthesis-v1.0.0.txt');
     expect(PROMPT_MANIFEST['eval-grounding-judge'].fileName).toBe(
       'eval-grounding-judge-v1.1.0.txt',
@@ -32,11 +32,13 @@ describe('prompt loader', () => {
       expect(loaded.content.length).toBeGreaterThan(0);
       expect(loaded.content).toContain('ESCALATE');
     }
+
+    expect(loadPrompt('system-policy').content).toContain('propose_access_decision');
   });
 
   it('lists active prompt versions for eval harness consumption', () => {
     expect(listActivePromptVersions()).toEqual([
-      { key: 'system-policy', version: '1.5.0' },
+      { key: 'system-policy', version: '1.6.0' },
       { key: 'rag-synthesis', version: '1.0.0' },
       { key: 'eval-grounding-judge', version: '1.1.0' },
     ]);

@@ -82,6 +82,10 @@ const pendingRequest: PendingAccessRequest = {
       },
     ],
     confidenceScore: 0.91,
+    proposedTool: {
+      name: 'propose_access_decision',
+      status: 'awaiting_human_approval',
+    },
   },
 };
 

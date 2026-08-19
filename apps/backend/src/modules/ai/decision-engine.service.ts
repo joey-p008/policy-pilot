@@ -6,12 +6,11 @@ import { groundDecisionCitations } from './citation-grounding';
 import { PolicyDocumentChunkSchema } from './dto/document-ingestion.dto';
 import { executeWithObservability } from './observability/llm-observability.wrapper';
 import { ACCESS_DECISION_PROMPT_KEY } from './prompts/access-decision.prompt';
+import { Decision, DecisionSchema } from './schemas/recommendation.schema';
 import {
-  Decision,
-  DecisionJsonSchema,
-  DECISION_JSON_SCHEMA_NAME,
-  DecisionSchema,
-} from './schemas/recommendation.schema';
+  PROPOSE_ACCESS_DECISION_TOOL,
+  PROPOSE_ACCESS_DECISION_TOOL_NAME,
+} from './tools/propose-access-decision.tool';
 
 const DecisionEngineRequestSchema = z.object({
   requestId: z.string().min(1),
@@ -69,10 +68,11 @@ export class DecisionEngineService {
         promptKey: ACCESS_DECISION_PROMPT_KEY,
         model: this.chatClient.model,
         payload,
+        expectedToolName: PROPOSE_ACCESS_DECISION_TOOL_NAME,
         execute: (assembledPrompt: string) =>
           this.chatClient.complete(assembledPrompt, {
-            jsonSchema: DecisionJsonSchema,
-            schemaName: DECISION_JSON_SCHEMA_NAME,
+            tools: [PROPOSE_ACCESS_DECISION_TOOL],
+            toolChoice: { name: PROPOSE_ACCESS_DECISION_TOOL_NAME },
           }),
       },
       DecisionSchema,

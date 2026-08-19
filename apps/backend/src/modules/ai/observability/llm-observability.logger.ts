@@ -20,6 +20,7 @@ export class ConsoleLlmObservabilityLogger implements LlmObservabilityLogger {
       estimatedCostUsd: observation.estimatedCostUsd,
       schemaValid: observation.schemaValid,
       schemaErrors: observation.schemaErrors,
+      toolName: observation.toolName,
     });
 
     console.info(
